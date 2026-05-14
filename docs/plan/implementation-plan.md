@@ -1,0 +1,154 @@
+# Tatrman Modeler — Implementation Plan
+
+**Status:** Plan v1, 2026-05-14. Plan covers v1 (Foundation+Core LSP, minimal Designer, IntelliJ stub) plus a forward look at v1.1+ for context.
+
+## Plan shape
+
+The build is organized into six phases, executed mostly sequentially with one parallel track. Phase 0 is the vertical thin slice (decision D6); Phase 1 closes out Foundation tier; Phase 2 adds Core tier; Phase 3 lands the Designer's read-only experience; Phase 4 stands up the IntelliJ plugin; Phase 5 hardens, packages, and ships v1. Phases 1–3 can overlap modestly; phase 4 needs phase 2 done to be useful; phase 5 needs everything else.
+
+| Phase | Goal | Time | Dependencies |
+|---|---|---|---|
+| 0 | Vertical thin slice end-to-end | 1–2 weeks | None |
+| 1 | Foundation tier complete (highlighting, syntax diagnostics, language config) | 1 week | Phase 0 |
+| 2 | Core tier (semantics, resolver, go-to-def, find-refs, hover, undefined-ref diagnostics) | 3–4 weeks | Phase 0 (parser/AST), Phase 1 |
+| 3 | Designer v1 (read-only, db + er, schema/detail toggles, layout persistence) | 3–4 weeks | Phase 0, Phase 2 (semantics over LSP) |
+| 4 | IntelliJ plugin v1 (LSP4IJ wrapper, file-type registration, bundled runtime) | 1–2 weeks | Phase 2 |
+| 5 | Hardening, packaging, distribution, docs | 1–2 weeks | Phases 1–4 |
+
+Total wall-clock estimate: **10–15 weeks** for v1, assuming one full-time developer plus Bora reviewing. Parallelization (e.g. Phase 3 starting once Phase 2 is half-done) can compress this to 8–10 weeks.
+
+## Phase 0 — vertical thin slice (1–2 weeks)
+
+**Goal**: end-to-end working pipeline at the lowest possible feature bar. After Phase 0, opening a `.ttr` file in VS Code shows syntax-highlighted text with red squigglies on syntax errors, and opening the Designer shows a minimal read-only graph for one sample file.
+
+**Deliverables**:
+- Monorepo scaffold (pnpm workspaces, TypeScript, Vitest, ESLint, Prettier, EditorConfig)
+- `@modeler/grammar` package with `TTR.g4` moved into it and a sync script (no ai-platform integration yet — just the local script with documented usage)
+- `@modeler/parser` with antlr4ng-generated parser, minimal `parseString` API returning errors + a stub AST (no full Definition hierarchy yet — just the schema directive and definition kinds + names)
+- `@modeler/semantics` placeholder (empty exports; package exists for downstream imports)
+- `@modeler/edit` placeholder
+- `@modeler/lsp` minimal: initialize, document sync, syntax-error diagnostics; one custom method `modeler/getModelGraph` returning a stub graph from the parsed file
+- `@modeler/vscode-ext` minimal: LSP client wiring, language registration, generated TextMate grammar
+- `@modeler/designer` minimal: forked from Ontology Playground with the cuts described in §4.7 of the architecture; LSP-in-Web-Worker bootstrap; renders one schema (just entity nodes, no edges, no detail panel content) from the stub graph
+- CI passing on a green build
+
+Detailed task breakdown in `tasks-phase-00-thin-slice.md`. After Phase 0, the developer can demo end-to-end: open a `.ttr` file, see highlighting, save with a typo to see a diagnostic, switch to the Designer to see the model nodes rendered.
+
+## Phase 1 — Foundation tier complete (1 week)
+
+**Goal**: VS Code plugin ships every Foundation-tier feature.
+
+**Deliverables**:
+- TextMate grammar covers every token in the grammar (not just the v0 subset Phase 0 generated)
+- Language configuration: bracket pairs, comment toggle (`//` and `/* */`), auto-close, indentation rules tuned for `def <kind> { ... }` and inline lists
+- Semantic tokens via LSP for tokens that TextMate can't disambiguate (e.g. dotted ids where one part is a schema-code keyword)
+- Document selectors: `.ttr` and `.ttrl` both registered
+- File icons (small modeler-themed icon set; one for `.ttr`, one for `.ttrl`)
+- Diagnostic categories: `parse-error` (existing) + `unknown-property` (the parser already rejects these) + `parse-recovery-info` (new) emitted as `Information`-severity hints when error recovery synthesized a node
+
+**Acceptance**: every sample file in `samples/` opens and is highlighted correctly; deliberately-broken variants of each sample produce useful diagnostics.
+
+## Phase 2 — Core tier (3–4 weeks)
+
+**Goal**: the semantic plumbing that makes the language understandable, plus the navigation and inspection features that depend on it.
+
+**Sub-phases**:
+
+**2.A — AST completion (3–5 days)**. Fill in `@modeler/parser`'s AST: every `Definition` subtype, every property, full `PropertyValue` union, every inline-def list. Source locations on every node. CST view exposed (trivia preserved for the edit synthesizer). 100% golden-fixture coverage of `samples/` parsing without error.
+
+**2.B — Symbol table (3–5 days)**. `@modeler/semantics`'s symbol table: per-document index keyed by qname; project-wide aggregator that merges per-document indexes; incremental rebuild on document change. Stock vocabulary auto-loaded ahead of project files. Conflict detection (duplicate qname across files).
+
+**2.C — Reference resolver (4–6 days)**. Resolve `Reference(path)` against the symbol table. Dotted refs walk schema → namespace → kind → name. Bare refs use lexical scope (e.g. attribute names within an entity body). Resolution returns `ResolvedSymbol` or `UnresolvedReference` with the searched scope chain attached.
+
+**2.D — Validator (3–5 days)**. Per-kind structural validations: required properties, type matching, primary-key columns exist, etc. Diagnostics via the LSP push channel.
+
+**2.E — Go-to-definition (1–2 days)**. Standard LSP method, dispatches to the resolver.
+
+**2.F — Find-references (1–2 days)**. Reverse index built incrementally as the symbol table builds. Standard LSP method.
+
+**2.G — Hover (2–3 days)**. Returns formatted hover content: definition's `description`, type, schema kind, source file:line. Localized labels picked per `[language].preferred`.
+
+**2.H — Workspace symbol search (1 day)**. Fuzzy search over the project-wide symbol table.
+
+**Acceptance**: in a multi-file project (e.g. the full `samples/v1-metadata/` bundle), Cmd-clicking a reference jumps to its definition, hovering shows the description, find-references lists every use across files, and intentionally-introduced typos in qnames are flagged with red squigglies.
+
+## Phase 3 — Designer v1 (3–4 weeks)
+
+**Goal**: minimal Designer per D7 — read-only render of `db` and `er`, single display variant, schema/detail toggles, layout persistence.
+
+**Sub-phases**:
+
+**3.A — Designer scaffold cleanup (3–5 days)**. Remove the cuts (Quests, gamification, Ontology School). Keep canvas, detail panel, top menu bar, NL pane (functionally inert), look-and-feel. Replace RDF-specific code paths with TTR-specific stubs.
+
+**3.B — LSP integration (3–5 days)**. LSP-in-Web-Worker bootstrap; LSP client over MessageChannel; `modeler/getModelGraph` consumed; `modeler/getLayout` / `modeler/setLayout` round-trip working; file-system shim (File System Access API + upload fallback).
+
+**3.C — db schema rendering (3–5 days)**. Cytoscape adapter for `db.table` nodes (showing columns inline per displayMode), `db.fk` edges between tables. Schema toggle UI (db / er buttons). Detail-mode toggle UI (just-names / with-types / with-constraints).
+
+**3.D — er schema rendering (3–5 days)**. Cytoscape adapter for `er.entity` nodes (showing attributes inline), `er.relation` edges (with cardinality glyph in Crow's foot style). Reuses the schema/detail-toggle UI from 3.C.
+
+**3.E — Detail panel (3–5 days)**. Right-side panel populated from `modeler/getModelGraph`'s descriptive records (`description`, `tags`, type, source file:line, related symbols).
+
+**3.F — Layout persistence (2–3 days)**. On every viewport pan/zoom and node drag, debounced `modeler/setLayout` calls. On open, `modeler/getLayout` restores positions and viewport state.
+
+**3.G — Static-site deploy (1–2 days)**. GitHub Pages workflow; embeddable `<script>` tag for inline use; demo-mode landing page with the `samples/` bundle pre-loaded.
+
+**Acceptance**: open the `samples/v1-metadata/` bundle in the Designer, see db and er rendered correctly with default layouts, drag nodes to a custom layout, close + reopen, layout restored. Click a node and see its details in the right panel.
+
+## Phase 4 — IntelliJ plugin v1 (1–2 weeks)
+
+**Goal**: deliver the priority-3 IntelliJ plugin with feature parity to VS Code's Phase 1+2 surface.
+
+**Sub-phases**:
+
+**4.A — Gradle scaffold (1–2 days)**. IntelliJ Platform Gradle Plugin, Kotlin, target IntelliJ 2024.x+. File type registrations for `.ttr` and `.ttrl`.
+
+**4.B — Bundled runtime (2–3 days)**. Per-platform Node binary bundled into the plugin JAR. Runtime extraction to a per-user cache directory on first run.
+
+**4.C — LSP4IJ integration (2–3 days)**. Language server descriptor pointing at the bundled LSP. Standard LSP4IJ surface lights up the standard LSP features automatically.
+
+**4.D — Polish (1–2 days)**. Plugin metadata (name, description, screenshots, icon). Install/upgrade smoke tests in IntelliJ Community + Ultimate.
+
+**Acceptance**: install the plugin in a clean IntelliJ; open `samples/v1-metadata/`; same highlighting, navigation, hover, find-references behavior as VS Code.
+
+## Phase 5 — Hardening, packaging, distribution (1–2 weeks)
+
+**Goal**: ship v1.
+
+**Sub-phases**:
+
+**5.A — Documentation (3–5 days)**. README revamp with quick-start for VS Code, Designer, IntelliJ; architecture overview pointing at the design doc; contributor guide; troubleshooting page.
+
+**5.B — Packaging (2–3 days)**. VS Code `.vsix` build, signed; IntelliJ `.zip` build, signed; Designer GitHub Pages workflow tested; embed `<script>` artifact published to npm and GitHub Pages.
+
+**5.C — Marketplace submissions (2–3 days)**. VS Code Marketplace submission; JetBrains Marketplace submission; both with screenshots, descriptions, categorization.
+
+**5.D — Performance pass (2–3 days)**. Profile parsing on the largest realistic sample; ensure cold-start LSP < 2 seconds; ensure Designer initial render < 3 seconds for a 100-node graph; tune anywhere these targets aren't hit.
+
+**5.E — Release (1 day)**. v1.0.0 tag; GitHub Release with changelog; marketplace publish.
+
+## v1.1+ outlook (not planned in detail)
+
+For context, here's the rough sequence post-v1, in priority order:
+
+- **v1.1**: Designer edit mode. The biggest single addition: the edit synthesizer becomes load-bearing; Designer gains entity/attribute/relation create/edit/delete. Estimated 4–6 weeks.
+- **v1.2**: Productivity-tier LSP (completion for property names, schema kinds, references; document/workspace symbols; outline view). Estimated 3–4 weeks.
+- **v1.3**: Polish-tier LSP (rename, format, code actions, code lens, semantic tokens richer rules). Estimated 3–4 weeks.
+- **v1.4**: Designer's `cnc` schema + Chen / UML display variants for E-R + the natural-language pane wired to an LLM. Estimated 4–6 weeks.
+- **v1.5+**: live-database integration (validate model against actual database schemas via ai-platform's metadata service), team collaboration features, etc.
+
+## Risks
+
+- **Edit synthesizer (v1.1) complexity**. The biggest risk in the v1.1 plan; Phase 0–v1 keeps it deferred so we don't carry it as an unknown. When we get there, expect a meaningful architectural pass before implementation starts.
+- **antlr4ng maturity**. Decision locked: we use `antlr4ng` (modern, actively maintained ANTLR4 TypeScript runtime). Phase 0 surfaces any issues against our specific grammar. Contingency if a hard blocker appears: the Lezer parser system used by CodeMirror has good editor-tooling DNA but requires hand-writing the grammar (not regenerated from `.g4`) — escalate to Bora before going down that path.
+- **Stock vocabulary sync drift**. ai-platform may evolve the stock vocab format. Mitigation: the sync script is small; we can adapt. Long-term, formalizing the stock-vocab as a versioned interchange format would help.
+- **Browser file-system access in the Designer**. May force VS Code webview as the primary delivery for file-editing scenarios. Static site survives as a demo mode and an embed target.
+
+## Acceptance summary
+
+v1 ships when:
+
+- VS Code extension is on the Marketplace, installable, and demonstrably useful on a real `.ttr` project
+- Designer is at a public URL and renders the `samples/` bundle correctly
+- IntelliJ plugin is on JetBrains Marketplace
+- All three hosts pass the same `samples/`-based smoke tests in CI
+- Documentation covers install, getting started, and the architectural shape

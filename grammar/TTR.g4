@@ -1,0 +1,474 @@
+// =============================================================================
+// TTR (Tatrman) v1 grammar — Phase 1.3 promotion of docs/v1/TTR-v1.g4
+//
+// Promotion fixes vs the source sketch:
+//   1. STRING_LITERAL_FORM is now a parser rule `stringLiteralForm` (the
+//      sketch had it as a lexer rule with alternation between two existing
+//      tokens, which doesn't make sense in ANTLR4's lexer FSA).
+//   2. EQ (==) is the equality operator only. The propsep '=' is EQUALS
+//      and `is` accepts COLON | EQUALS exclusively.
+//   3. The `is` parser rule renamed to `propSep` because `is` is a Kotlin
+//      keyword in the generated visitor's host language.
+// =============================================================================
+
+grammar TTR;
+
+// ----- Top level -----
+
+document
+  : schemaDirective? definition* EOF
+  ;
+
+schemaDirective
+  : SCHEMA schemaCode ( NAMESPACE id )?
+  ;
+
+schemaCode
+  : DB | ER | MAP | QUERY | CNC
+  ;
+
+definition
+  : DEF objectDefinition
+  ;
+
+objectDefinition
+  : MODEL          id  modelDef
+  | TABLE          id  tableDef
+  | VIEW           id  viewDef
+  | COLUMN         id  columnDef
+  | INDEX          id  indexDef
+  | CONSTRAINT     id  constraintDef
+  | FK             id  fkDef
+  | PROCEDURE      id  procedureDef
+  | ENTITY         id  entityDef
+  | ATTRIBUTE      id  attributeDef
+  | RELATION       id  relationDef
+  | ER2DB_ENTITY   id  er2dbEntityDef
+  | ER2DB_ATTRIBUTE id er2dbAttributeDef
+  | ER2DB_RELATION id  er2dbRelationDef
+  | QUERY          id  queryDef
+  | ROLE           id  roleDef            // Phase 2.2 — cnc.role.*
+  | ER2CNC_ROLE    id  er2cncRoleDef      // Phase 2.2 — er2cnc_role.*
+  ;
+
+// ----- Object bodies -----
+// Each *Def is a brace-enclosed list of properties. Comma-optional.
+
+modelDef         : LBRACE (modelProperty         (COMMA? modelProperty)*         COMMA?)? RBRACE ;
+tableDef         : LBRACE (tableProperty         (COMMA? tableProperty)*         COMMA?)? RBRACE ;
+viewDef          : LBRACE (viewProperty          (COMMA? viewProperty)*          COMMA?)? RBRACE ;
+columnDef        : LBRACE (columnProperty        (COMMA? columnProperty)*        COMMA?)? RBRACE ;
+indexDef         : LBRACE (indexProperty         (COMMA? indexProperty)*         COMMA?)? RBRACE ;
+constraintDef    : LBRACE (constraintProperty    (COMMA? constraintProperty)*    COMMA?)? RBRACE ;
+fkDef            : LBRACE (fkProperty            (COMMA? fkProperty)*            COMMA?)? RBRACE ;
+procedureDef     : LBRACE (procedureProperty     (COMMA? procedureProperty)*     COMMA?)? RBRACE ;
+entityDef        : LBRACE (entityProperty        (COMMA? entityProperty)*        COMMA?)? RBRACE ;
+attributeDef     : LBRACE (attributeProperty     (COMMA? attributeProperty)*     COMMA?)? RBRACE ;
+relationDef      : LBRACE (relationProperty      (COMMA? relationProperty)*      COMMA?)? RBRACE ;
+er2dbEntityDef   : LBRACE (er2dbEntityProperty   (COMMA? er2dbEntityProperty)*   COMMA?)? RBRACE ;
+er2dbAttributeDef: LBRACE (er2dbAttributeProperty(COMMA? er2dbAttributeProperty)* COMMA?)? RBRACE ;
+er2dbRelationDef : LBRACE (er2dbRelationProperty (COMMA? er2dbRelationProperty)* COMMA?)? RBRACE ;
+queryDef         : LBRACE (queryProperty         (COMMA? queryProperty)*         COMMA?)? RBRACE ;
+roleDef          : LBRACE (roleProperty          (COMMA? roleProperty)*          COMMA?)? RBRACE ;
+er2cncRoleDef    : LBRACE (er2cncRoleProperty    (COMMA? er2cncRoleProperty)*    COMMA?)? RBRACE ;
+
+// ----- Per-kind valid properties -----
+
+modelProperty            : descriptionProperty | tagsProperty | versionProperty ;
+
+tableProperty            : descriptionProperty | tagsProperty | primaryKeyProperty | columnsProperty | indicesProperty | constraintsProperty ;
+
+viewProperty             : descriptionProperty | tagsProperty | columnsProperty | definitionSqlProperty ;
+
+columnProperty           : descriptionProperty | tagsProperty | typeProperty | optionalProperty | isKeyProperty | searchableProperty | indexedProperty ;
+
+indexProperty            : descriptionProperty | indexTypeProperty | columnNamesListProperty ;
+
+constraintProperty       : descriptionProperty | constraintTypeProperty | columnNamesListProperty ;
+
+fkProperty               : descriptionProperty | tagsProperty | fromProperty | toProperty ;
+
+procedureProperty        : descriptionProperty | tagsProperty | parametersProperty | resultColumnsProperty ;
+
+entityProperty           : descriptionProperty | tagsProperty | labelPluralProperty | nameAttributeProperty | codeAttributeProperty | aliasesProperty | attributesProperty | rolesProperty | displayLabelProperty | searchBlockProperty ;
+
+attributeProperty        : descriptionProperty | tagsProperty | typeProperty | isKeyProperty | optionalProperty | searchableProperty | valueLabelsProperty | displayLabelProperty | searchBlockProperty ;
+
+relationProperty         : descriptionProperty | tagsProperty | fromProperty | toProperty | cardinalityProperty | joinProperty ;
+
+er2dbEntityProperty      : descriptionProperty | tagsProperty | entityProperty_ | targetProperty | whereFilterProperty ;
+
+er2dbAttributeProperty   : descriptionProperty | tagsProperty | attributeProperty_ | targetProperty ;
+
+er2dbRelationProperty    : descriptionProperty | tagsProperty | relationProperty_ | fkProperty_ ;
+
+queryProperty            : descriptionProperty | tagsProperty | languageProperty | parametersProperty | sourceTextProperty | searchBlockProperty ;
+
+roleProperty             : descriptionProperty | tagsProperty | labelProperty | searchBlockProperty ;
+
+er2cncRoleProperty       : descriptionProperty | tagsProperty | entityProperty_ | roleProperty_ ;
+
+// A query / procedure parameter: { name: <id>, type: <dataType>, label: "...", direction: <id> }.
+// `label` here is a plain display string (unlike `roleProperty`'s localised `labelProperty`).
+// `direction` (IN | OUT | INOUT) only appears on procedure parameters.
+paramProperty            : nameProperty | typeProperty | paramLabelProperty | directionProperty ;
+
+// ----- Property productions -----
+
+descriptionProperty       : DESCRIPTION       propSep? stringLiteralForm ;
+tagsProperty              : TAGS              propSep? listOfStrings ;
+versionProperty           : VERSION           propSep? STRING_LITERAL ;
+primaryKeyProperty        : PRIMARY_KEY       propSep? listOfStrings ;
+columnsProperty           : COLUMNS           propSep? columnDefList ;
+indicesProperty           : INDICES           propSep? indexDefList ;
+constraintsProperty       : CONSTRAINTS       propSep? constraintDefList ;
+definitionSqlProperty     : DEFINITION_SQL    propSep? stringLiteralForm ;
+typeProperty              : DATA_TYPE         propSep? dataType ;
+optionalProperty          : OPTIONAL          propSep? BOOLEAN_LITERAL ;
+isKeyProperty             : IS_KEY            propSep? BOOLEAN_LITERAL ;
+searchableProperty        : SEARCHABLE        propSep? BOOLEAN_LITERAL ;
+indexedProperty           : INDEXED           propSep? BOOLEAN_LITERAL ;
+indexTypeProperty         : DATA_TYPE         propSep? indexTypeValue ;
+constraintTypeProperty    : DATA_TYPE         propSep? constraintTypeValue ;
+columnNamesListProperty   : COLUMNS           propSep? listOfStrings ;
+fromProperty              : FROM              propSep? value ;
+toProperty                : TO                propSep? value ;
+parametersProperty        : PARAMETERS        propSep? parameterDefList ;
+resultColumnsProperty     : RESULT_COLUMNS    propSep? columnDefList ;
+labelPluralProperty       : LABEL_PLURAL      propSep? STRING_LITERAL ;
+nameAttributeProperty     : NAME_ATTRIBUTE    propSep? id ;
+nameProperty              : NAME              propSep? id ;
+codeAttributeProperty     : CODE_ATTRIBUTE    propSep? id ;
+aliasesProperty           : ALIASES           propSep? listOfStrings ;
+attributesProperty        : ATTRIBUTES        propSep? attributeDefList ;
+cardinalityProperty       : CARDINALITY       propSep? object_ ;
+joinProperty              : JOIN              propSep? list ;
+entityProperty_           : ENTITY            propSep? id ;
+attributeProperty_        : ATTRIBUTE         propSep? id ;
+relationProperty_         : RELATION          propSep? id ;
+fkProperty_               : FK                propSep? id ;
+targetProperty            : TARGET            propSep? object_ ;
+whereFilterProperty       : WHERE_FILTER      propSep? object_ ;
+languageProperty          : LANGUAGE          propSep? languageValue ;
+sourceTextProperty        : SOURCE_TEXT       propSep? stringLiteralForm ;
+
+// Phase 2.2 — localised string blocks: { cs: "...", en: "..." } shape, used for
+// role labels, entity / attribute display_label, and value_labels values.
+labelProperty             : LABEL             propSep? localizedString ;
+paramLabelProperty        : LABEL             propSep? stringLiteralForm ;
+directionProperty         : DIRECTION         propSep? id ;
+displayLabelProperty      : DISPLAY_LABEL     propSep? localizedString ;
+rolesProperty             : ROLES             propSep? listOfIds ;
+valueLabelsProperty       : VALUE_LABELS      propSep? valueLabelsBody ;
+roleProperty_             : ROLE              propSep? id ;
+
+// Search feature — `search { keywords {...} patterns [...] descriptions {...} examples [...] aliases [...] }`
+searchBlockProperty       : SEARCH            propSep? searchBlock ;
+keywordsProperty          : KEYWORDS          propSep? localizedStringList ;
+patternsProperty          : PATTERNS          propSep? listOfStrings ;
+descriptionsProperty      : DESCRIPTIONS      propSep? localizedStringList ;
+examplesProperty          : EXAMPLES          propSep? listOfStrings ;
+
+// ----- Inline def lists -----
+
+columnDefList     : LBRACK ( columnInline COMMA? )* RBRACK | columnInline ;
+columnInline      : DEF COLUMN id columnDef ;
+
+indexDefList      : LBRACK ( indexInline COMMA? )* RBRACK | indexInline ;
+indexInline       : DEF INDEX id indexDef ;
+
+constraintDefList : LBRACK ( constraintInline COMMA? )* RBRACK | constraintInline ;
+constraintInline  : DEF CONSTRAINT id constraintDef ;
+
+attributeDefList  : LBRACK ( attributeInline COMMA? )* RBRACK | attributeInline ;
+attributeInline   : DEF ATTRIBUTE id attributeDef ;
+
+parameterDefList  : LBRACK ( parameterInline COMMA? )* RBRACK | parameterInline ;
+parameterInline   : LBRACE ( paramProperty COMMA? )* RBRACE ;
+
+// ----- Type values -----
+
+dataType
+  : typeValue
+  | LBRACE dataTypeProperty (COMMA? dataTypeProperty)* COMMA? RBRACE
+  ;
+
+dataTypeProperty
+  : DATA_TYPE propSep? typeValue
+  | LENGTH    propSep? NUMBER_LITERAL
+  | PRECISION propSep? NUMBER_LITERAL
+  ;
+
+typeValue
+  : TEXT | INT | FLOAT | BOOL | DATETIME
+  | STRING | BOOLEAN | NUMBER | INTEGER | DOUBLE
+  | OBJECT | LIST
+  | CHAR | VARCHAR | DECIMAL | DATE | TIMESTAMP
+  | id
+  ;
+
+indexTypeValue       : PRIMARY | SECONDARY | ORDERED | BTREE | FULLTEXT ;
+constraintTypeValue  : UNIQUE | NOT_NULL ;
+languageValue        : SQL | TRANSFORMATION_DSL | DATAFRAME_DSL | REL_NODE ;
+
+// ----- Generic value forms -----
+
+propSep : COLON | EQUALS ;
+
+value
+  : literal
+  | id
+  | list
+  | object_
+  | functionCall
+  ;
+
+literal
+  : NUMBER_LITERAL
+  | stringLiteralForm
+  | BOOLEAN_LITERAL
+  | NULL_LITERAL
+  ;
+
+stringLiteralForm
+  : STRING_LITERAL
+  | TRIPLE_STRING_LITERAL
+  ;
+
+list
+  : LBRACK ( value (COMMA value)* )? COMMA? RBRACK
+  ;
+
+listOfStrings
+  : LBRACK ( stringLiteralForm ( COMMA stringLiteralForm )* )? COMMA? RBRACK
+  ;
+
+// Phase 2.2 — bracketed list of bare ids (used by `roles: [fact, dimension]`).
+listOfIds
+  : LBRACK ( id ( COMMA id )* )? COMMA? RBRACK
+  ;
+
+// Phase 2.2 — `{ cs: "...", en: "...", de: "..." }` block. Keys are bare
+// language tags (BCP-47); values are string literals. Empty block is valid.
+localizedString
+  : LBRACE ( localizedEntry ( COMMA? localizedEntry )* COMMA? )? RBRACE
+  ;
+
+localizedEntry
+  : id propSep? stringLiteralForm
+  ;
+
+// Phase 2.2 — `value_labels { "1": { cs: "Aktivní", en: "Active" }, "2": { ... } }`
+valueLabelsBody
+  : LBRACE ( valueLabelEntry ( COMMA? valueLabelEntry )* COMMA? )? RBRACE
+  ;
+
+valueLabelEntry
+  : stringLiteralForm propSep? localizedString
+  ;
+
+// Search feature — `{ cs: ["...", "..."], en: ["..."] }` block. Mirrors localizedString
+// but each language's value is a list of strings instead of a single string. Empty
+// block is valid (a parse-time warning is emitted by the loader's validator).
+localizedStringList
+  : LBRACE ( localizedStringListEntry ( COMMA? localizedStringListEntry )* COMMA? )? RBRACE
+  ;
+
+localizedStringListEntry
+  : id propSep? listOfStrings
+  ;
+
+// Search feature — body of a `search { ... }` block.
+searchBlock
+  : LBRACE ( searchSubProperty ( COMMA? searchSubProperty )* COMMA? )? RBRACE
+  ;
+
+searchSubProperty
+  : keywordsProperty
+  | patternsProperty
+  | descriptionsProperty
+  | examplesProperty
+  | aliasesProperty
+  ;
+
+object_
+  : LBRACE propertyList? RBRACE
+  ;
+
+propertyList
+  : propertyEntry (COMMA? propertyEntry)* COMMA?
+  ;
+
+propertyEntry
+  : key propSep? value
+  ;
+
+key
+  : id
+  ;
+
+functionCall
+  : id LPAREN ( value (COMMA value)* )? RPAREN
+  ;
+
+// ----- Identifiers -----
+//
+// Cross-references (dotted ids) may contain schema-code or object-kind keywords
+// as positional components — e.g. `er.entity.objednavka`, `cnc.role.fact`,
+// `db.dbo.customers`. ANTLR otherwise tokenises those as their respective
+// keyword tokens; we accept them as IDENT-equivalents here so dotted refs work.
+//
+// `idPart` is the union; `id` is one or more dotted parts.
+
+id : idPart ( DOT idPart )* ;
+
+idPart
+  : IDENT
+  | DB | ER | MAP | QUERY | CNC                          // schema codes
+  | ROLE | ER2CNC_ROLE                                   // Phase 2.2 kinds
+  | TABLE | VIEW | COLUMN | INDEX | CONSTRAINT
+  | FK | PROCEDURE | ENTITY | ATTRIBUTE | RELATION
+  | ER2DB_ENTITY | ER2DB_ATTRIBUTE | ER2DB_RELATION
+  | MODEL
+  | NAME | LABEL | DIRECTION                              // common as identifiers / object keys (e.g. `def column name`)
+  | FROM | TO                                            // allowed as object property keys (e.g. cardinality, join pairs)
+  ;
+
+// =============================================================================
+// Lexer
+// =============================================================================
+
+DEF        : 'def' ;
+SCHEMA     : 'schema' ;
+NAMESPACE  : 'namespace' ;
+
+DB    : 'db' ;
+ER    : 'er' ;
+MAP   : 'map' ;
+CNC   : 'cnc' ;                        // Phase 2.2 — conceptual schema
+
+MODEL            : 'model' ;
+TABLE            : 'table' ;
+VIEW             : 'view' ;
+COLUMN           : 'column' ;
+INDEX            : 'index' ;
+CONSTRAINT       : 'constraint' ;
+FK               : 'fk' ;
+PROCEDURE        : 'procedure' ;
+ENTITY           : 'entity' ;
+ATTRIBUTE        : 'attribute' ;
+RELATION         : 'relation' ;
+ER2DB_ENTITY     : 'er2db_entity' ;
+ER2DB_ATTRIBUTE  : 'er2db_attribute' ;
+ER2DB_RELATION   : 'er2db_relation' ;
+QUERY            : 'query' ;
+ROLE             : 'role' ;            // Phase 2.2
+ER2CNC_ROLE      : 'er2cnc_role' ;     // Phase 2.2
+
+DESCRIPTION       : 'description' ;
+TAGS              : 'tags' ;
+VERSION           : 'version' ;
+PRIMARY_KEY       : 'primaryKey' ;
+COLUMNS           : 'columns' ;
+INDICES           : 'indices' ;
+CONSTRAINTS       : 'constraints' ;
+ATTRIBUTES        : 'attributes' ;
+PARAMETERS        : 'parameters' ;
+RESULT_COLUMNS    : 'resultColumns' ;
+DEFINITION_SQL    : 'definitionSql' ;
+DATA_TYPE         : 'type' ;
+OPTIONAL          : 'optional' ;
+IS_KEY            : 'isKey' ;
+SEARCHABLE        : 'searchable' ;
+INDEXED           : 'indexed' ;
+LABEL_PLURAL      : 'labelPlural' ;
+NAME_ATTRIBUTE    : 'nameAttribute' ;
+CODE_ATTRIBUTE    : 'codeAttribute' ;
+ALIASES           : 'aliases' ;
+CARDINALITY       : 'cardinality' ;
+JOIN              : 'join' ;
+TARGET            : 'target' ;
+WHERE_FILTER      : 'whereFilter' ;
+LANGUAGE          : 'language' ;
+SOURCE_TEXT       : 'sourceText' ;
+LENGTH            : 'length' ;
+PRECISION         : 'precision' ;
+
+// Phase 2.2 — localised text + role properties.
+LABEL             : 'label' ;
+NAME              : 'name' ;
+DIRECTION         : 'direction' ;
+DISPLAY_LABEL     : 'displayLabel' ;
+VALUE_LABELS      : 'valueLabels' ;
+ROLES             : 'roles' ;
+
+// Search feature — `search { keywords {...} patterns [...] descriptions {...} examples [...] aliases [...] }`.
+// `aliases` reuses the existing ALIASES token. `description` (single) and `descriptions` (list) are
+// distinct lexemes — ANTLR longest-match handles disambiguation.
+SEARCH            : 'search' ;
+KEYWORDS          : 'keywords' ;
+PATTERNS          : 'patterns' ;
+DESCRIPTIONS      : 'descriptions' ;
+EXAMPLES          : 'examples' ;
+
+FROM : 'from' ;
+TO   : 'to' ;
+
+TEXT      : 'text' ;
+INT       : 'int' ;
+FLOAT     : 'float' ;
+BOOL      : 'bool' ;
+DATETIME  : 'datetime' ;
+STRING    : 'string' ;
+BOOLEAN   : 'boolean' ;
+NUMBER    : 'number' ;
+INTEGER   : 'integer' ;
+DOUBLE    : 'double' ;
+OBJECT    : 'object' ;
+LIST      : 'list' ;
+CHAR      : 'char' ;
+VARCHAR   : 'varchar' ;
+DECIMAL   : 'decimal' ;
+DATE      : 'date' ;
+TIMESTAMP : 'timestamp' ;
+
+PRIMARY   : 'primary' ;
+SECONDARY : 'secondary' ;
+ORDERED   : 'ordered' ;
+BTREE     : 'btree' ;
+FULLTEXT  : 'fulltext' ;
+UNIQUE    : 'unique' ;
+NOT_NULL  : 'notNull' ;
+
+SQL                : 'SQL' ;
+TRANSFORMATION_DSL : 'TRANSFORMATION_DSL' ;
+DATAFRAME_DSL      : 'DATAFRAME_DSL' ;
+REL_NODE           : 'REL_NODE' ;
+
+// Punctuation / operators
+EQUALS : '=' ;       // property separator
+COLON  : ':' ;
+COMMA  : ',' ;
+LBRACE : '{' ;
+RBRACE : '}' ;
+LBRACK : '[' ;
+RBRACK : ']' ;
+LPAREN : '(' ;
+RPAREN : ')' ;
+DOT    : '.' ;
+
+// Literals
+NULL_LITERAL          : 'null' ;
+BOOLEAN_LITERAL       : 'true' | 'false' ;
+NUMBER_LITERAL        : '-'? [0-9]+ ( '.' [0-9]+ )? ( [eE] [+-]? [0-9]+ )? ;
+TRIPLE_STRING_LITERAL : '"""' .*? '"""' ;
+STRING_LITERAL        : '"' ( ~["\\\r\n] | '\\' . )* '"' ;
+
+// Identifiers (declared after keywords so keywords win)
+// Includes Czech/Latin Extended letters (á, č, ď, é, ě, í, ľ, ň, ó, ř, š, ť, ú, ů, ý, ž, etc.)
+IDENT : [a-zA-Z\u00C0-\u024F_][a-zA-Z0-9_\u00C0-\u024F]* ;
+
+// Skipped
+LINE_COMMENT  : '//' ~[\r\n]* -> skip ;
+BLOCK_COMMENT : '/*' .*? '*/' -> skip ;
+WS            : [ \t\r\n]+   -> skip ;
