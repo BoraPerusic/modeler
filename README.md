@@ -2,7 +2,7 @@
 
 This folder contains the support for the Tatrman modeling language, TTR.
 
-We start with the grammar in the `grammar` directory, and samples in the `samples` directory.
+We start with the grammar in `packages/grammar/src/TTR.g4`, and samples in the `samples` directory.
 
 ## Goal
 
