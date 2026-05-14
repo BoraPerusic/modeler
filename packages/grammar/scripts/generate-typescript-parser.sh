@@ -11,11 +11,11 @@ if [ ! -f "$GRAMMAR_FILE" ]; then
 fi
 
 if [ ! -d "$OUTPUT_DIR" ]; then
-  echo "Output directory not found: $OUTPUT_DIR"
-  echo "Run this script from @modeler/parser after installing antlr4ng-cli"
-  exit 1
+  mkdir -p "$OUTPUT_DIR"
 fi
 
+rm -rf "$OUTPUT_DIR"/*.ts "$OUTPUT_DIR"/*.interp "$OUTPUT_DIR"/*.tokens 2>/dev/null || true
+
 cd "$GRAMMAR_DIR/.."
-npx antlr4ng-cli -Xexact-match -Dlanguage=TypeScript -o "$OUTPUT_DIR" -Xmnemonics=false "$GRAMMAR_FILE"
+npx antlr-ng -o "$OUTPUT_DIR" -l -v -- "$GRAMMAR_FILE"
 echo "Parser generated to $OUTPUT_DIR"

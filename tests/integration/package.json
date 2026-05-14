@@ -5,5 +5,8 @@
   "type": "module",
   "scripts": {
     "test": "vitest run"
+  },
+  "dependencies": {
+    "antlr4ng": "^3.0.16"
   }
 }
