@@ -6,7 +6,6 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const tokens = [
-  // Keywords
   'DEF', 'SCHEMA', 'NAMESPACE', 'DB', 'ER', 'MAP', 'CNC',
   'MODEL', 'TABLE', 'VIEW', 'COLUMN', 'INDEX', 'CONSTRAINT', 'FK',
   'PROCEDURE', 'ENTITY', 'ATTRIBUTE', 'RELATION',

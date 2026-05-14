@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Header } from './components/Header';
 import { Canvas } from './components/Canvas';
 import { InspectorPanel } from './components/InspectorPanel';
+import { createLspClient } from './lsp-client';
 
 interface ModelNode {
   qname: string;
@@ -9,44 +10,42 @@ interface ModelNode {
   label: string;
 }
 
-interface ModelEdge {
-  // Phase 3 will add edges
-}
+type ModelEdge = Record<string, never>;
 
 function App() {
   const [nodes, setNodes] = useState<ModelNode[]>([]);
   const [edges, setEdges] = useState<ModelEdge[]>([]);
   const [selectedNode, setSelectedNode] = useState<ModelNode | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const workerRef = useRef<Worker | null>(null);
+  const clientRef = useRef<Awaited<ReturnType<typeof createLspClient>> | null>(null);
 
   useEffect(() => {
-    // Initialize LSP worker (placeholder for Phase 0 - will be wired in Phase 3)
-    return () => {
-      if (workerRef.current) {
-        workerRef.current.terminate();
+    let cancelled = false;
+    createLspClient().then((client) => {
+      if (cancelled) {
+        client.dispose();
+        return;
       }
+      client.onDiagnostics((_uri, messages) => {
+        setError(messages.length === 0 ? null : messages.join(', '));
+      });
+      clientRef.current = client;
+    });
+    return () => {
+      cancelled = true;
+      clientRef.current?.dispose();
+      clientRef.current = null;
     };
   }, []);
 
   const handleFileLoad = async (content: string, uri: string) => {
-    // In Phase 0, just parse the content directly
-    // Phase 3 will use LSP modeler/getModelGraph
-    const lines = content.split('\n');
-    const parsedNodes: ModelNode[] = [];
-
-    for (const line of lines) {
-      const match = line.match(/^\s*def\s+(\w+)\s+(\w+)/);
-      if (match) {
-        const kind = match[1];
-        const name = match[2];
-        parsedNodes.push({ qname: name, kind, label: name });
-      }
-    }
-
-    setNodes(parsedNodes);
-    setEdges([]);
-    setError(null);
+    const client = clientRef.current;
+    if (!client) return;
+    const fileUri = `file:///${uri}`;
+    await client.openDocument(fileUri, content);
+    const graph = await client.getModelGraph(fileUri);
+    setNodes(graph.nodes);
+    setEdges(graph.edges as never[]);
   };
 
   const handleNodeSelect = (node: ModelNode) => {

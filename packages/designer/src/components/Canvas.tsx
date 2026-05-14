@@ -7,7 +7,7 @@ interface CanvasProps {
   onNodeSelect: (node: { qname: string; kind: string; label: string }) => void;
 }
 
-export function Canvas({ nodes, edges, onNodeSelect }: CanvasProps) {
+export function Canvas({ nodes, edges: _edges, onNodeSelect }: CanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const cyRef = useRef<cytoscape.Core | null>(null);
 

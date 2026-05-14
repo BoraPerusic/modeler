@@ -49,6 +49,34 @@ describe('parser', () => {
     expect(error.source.line).toBeGreaterThan(0);
     expect(error.source.column).toBeGreaterThan(0);
   });
+
+  it('parseString("def entity foo {}") has correct offsets: offsetStart=0, offsetEnd=17', () => {
+    const result = parseString('def entity foo {}');
+    expect(result.errors).toHaveLength(0);
+    const def = result.ast?.definitions[0];
+    expect(def).toBeDefined();
+    expect(def!.source.offsetStart).toBe(0);
+    expect(def!.source.offsetEnd).toBe(17);
+  });
+
+  it('parseString("def entity foobar {}") endColumn is the column after the closing brace', () => {
+    const result = parseString('def entity foobar {}');
+    expect(result.errors).toHaveLength(0);
+    const def = result.ast?.definitions[0];
+    expect(def).toBeDefined();
+    expect(def!.source.offsetEnd).toBe(20);
+    expect(def!.source.endLine).toBe(1);
+    expect(def!.source.endColumn).toBe(20);
+  });
+
+  it('multi-line def: endLine and endColumn reflect the last token of the span', () => {
+    const result = parseString('def entity foo {\n}\n');
+    expect(result.errors).toHaveLength(0);
+    const def = result.ast?.definitions[0];
+    expect(def).toBeDefined();
+    expect(def!.source.endLine).toBe(2);
+    expect(def!.source.endColumn).toBe(1);
+  });
 });
 
 describe('parseFile', () => {

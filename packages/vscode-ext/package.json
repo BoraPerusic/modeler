@@ -5,15 +5,16 @@
   "type": "module",
   "displayName": "TTR Modeler",
   "description": "Language support for TTR (Tatrman) modeling language",
-  "version": "0.1.0",
   "engines": {
     "vscode": "^1.85.0"
   },
   "categories": ["Programming Languages", "Formatters"],
   "main": "./dist/extension.js",
   "scripts": {
-    "build": "tsc",
-    "typecheck": "tsc --noEmit"
+    "build": "pnpm run copy-server && tsc",
+    "copy-server": "node --input-type=module -e \"import fs from 'fs'; import path from 'path'; import { fileURLToPath } from 'url'; const __dirname = path.dirname(fileURLToPath(import.meta.url)); const src = path.resolve(__dirname, '../lsp/dist/server-stdio.js'); const dst = path.join(__dirname, 'dist', 'server-stdio.js'); fs.mkdirSync(path.dirname(dst), {recursive:true}); fs.copyFileSync(src, dst);\"",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src"
   },
   "dependencies": {
     "@modeler/lsp": "workspace:*",
@@ -30,7 +31,8 @@
       {
         "id": "ttr",
         "extensions": [".ttr"],
-        "aliases": ["TTR"]
+        "aliases": ["TTR"],
+        "configuration": "./language-configuration.json"
       },
       {
         "id": "ttrl",

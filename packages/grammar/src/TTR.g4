@@ -13,10 +13,6 @@
 
 grammar TTR;
 
-options {
-  language = TypeScript;
-}
-
 // ----- Top level -----
 
 document

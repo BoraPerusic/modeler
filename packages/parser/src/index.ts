@@ -1,2 +1,26 @@
 export { parseString, parseFile } from './walker.js';
-export type { Document, Definition, DefinitionKind, SchemaDirective, SourceLocation, ParseError, ParseResult } from './ast.js';
+export type {
+  Document,
+  Definition,
+  SchemaDirective,
+  SourceLocation,
+  ParseError,
+  ParseResult,
+  ModelDef,
+  TableDef,
+  ViewDef,
+  ColumnDef,
+  IndexDef,
+  ConstraintDef,
+  FkDef,
+  ProcedureDef,
+  EntityDef,
+  AttributeDef,
+  RelationDef,
+  Er2dbEntityDef,
+  Er2dbAttributeDef,
+  Er2dbRelationDef,
+  QueryDef,
+  RoleDef,
+  Er2cncRoleDef,
+} from './ast.js';

@@ -13,10 +13,26 @@ import type {
   SourceLocation,
   Document,
   Definition,
-  DefinitionKind,
   ParseError,
   ParseResult,
   SchemaDirective,
+  ModelDef,
+  TableDef,
+  ViewDef,
+  ColumnDef,
+  IndexDef,
+  ConstraintDef,
+  FkDef,
+  ProcedureDef,
+  EntityDef,
+  AttributeDef,
+  RelationDef,
+  Er2dbEntityDef,
+  Er2dbAttributeDef,
+  Er2dbRelationDef,
+  QueryDef,
+  RoleDef,
+  Er2cncRoleDef,
 } from './ast.js';
 
 class DiagnosticErrorListener implements ANTLRErrorListener {
@@ -36,6 +52,7 @@ class DiagnosticErrorListener implements ANTLRErrorListener {
     msg: string,
     _e: RecognitionException | null
   ): void {
+    const symbol = _offendingSymbol;
     this.errors.push({
       message: msg,
       severity: 'error',
@@ -44,9 +61,9 @@ class DiagnosticErrorListener implements ANTLRErrorListener {
         line,
         column: charPositionInLine,
         endLine: line,
-        endColumn: charPositionInLine + 1,
-        offsetStart: 0,
-        offsetEnd: 0,
+        endColumn: charPositionInLine + (symbol?.stop ? symbol.stop - symbol.start + 1 : 1),
+        offsetStart: symbol?.start ?? 0,
+        offsetEnd: symbol ? symbol.stop + 1 : 0,
       },
     });
   }
@@ -169,47 +186,43 @@ function walkDefinition(ctx: DefinitionContext, file: string): Definition {
   const objDef = ctx.objectDefinition();
   const nameCtx = objDef.id();
   const name = nameCtx ? nameCtx.getText() : '';
+  const source = makeSourceLocation(ctx, file);
 
-  let kind: DefinitionKind = 'model';
+  if (objDef.MODEL()) return { kind: 'model', name, source } satisfies ModelDef;
+  if (objDef.TABLE()) return { kind: 'table', name, source } satisfies TableDef;
+  if (objDef.VIEW()) return { kind: 'view', name, source } satisfies ViewDef;
+  if (objDef.COLUMN()) return { kind: 'column', name, source } satisfies ColumnDef;
+  if (objDef.INDEX()) return { kind: 'index', name, source } satisfies IndexDef;
+  if (objDef.CONSTRAINT()) return { kind: 'constraint', name, source } satisfies ConstraintDef;
+  if (objDef.FK()) return { kind: 'fk', name, source } satisfies FkDef;
+  if (objDef.PROCEDURE()) return { kind: 'procedure', name, source } satisfies ProcedureDef;
+  if (objDef.ENTITY()) return { kind: 'entity', name, source } satisfies EntityDef;
+  if (objDef.ATTRIBUTE()) return { kind: 'attribute', name, source } satisfies AttributeDef;
+  if (objDef.RELATION()) return { kind: 'relation', name, source } satisfies RelationDef;
+  if (objDef.ER2DB_ENTITY()) return { kind: 'er2dbEntity', name, source } satisfies Er2dbEntityDef;
+  if (objDef.ER2DB_ATTRIBUTE()) return { kind: 'er2dbAttribute', name, source } satisfies Er2dbAttributeDef;
+  if (objDef.ER2DB_RELATION()) return { kind: 'er2dbRelation', name, source } satisfies Er2dbRelationDef;
+  if (objDef.QUERY()) return { kind: 'query', name, source } satisfies QueryDef;
+  if (objDef.ROLE()) return { kind: 'role', name, source } satisfies RoleDef;
+  if (objDef.ER2CNC_ROLE()) return { kind: 'er2cncRole', name, source } satisfies Er2cncRoleDef;
 
-  if (objDef.MODEL()) kind = 'model';
-  else if (objDef.TABLE()) kind = 'table';
-  else if (objDef.VIEW()) kind = 'view';
-  else if (objDef.COLUMN()) kind = 'column';
-  else if (objDef.INDEX()) kind = 'index';
-  else if (objDef.CONSTRAINT()) kind = 'constraint';
-  else if (objDef.FK()) kind = 'fk';
-  else if (objDef.PROCEDURE()) kind = 'procedure';
-  else if (objDef.ENTITY()) kind = 'entity';
-  else if (objDef.ATTRIBUTE()) kind = 'attribute';
-  else if (objDef.RELATION()) kind = 'relation';
-  else if (objDef.ER2DB_ENTITY()) kind = 'er2dbEntity';
-  else if (objDef.ER2DB_ATTRIBUTE()) kind = 'er2dbAttribute';
-  else if (objDef.ER2DB_RELATION()) kind = 'er2dbRelation';
-  else if (objDef.QUERY()) kind = 'query';
-  else if (objDef.ROLE()) kind = 'role';
-  else if (objDef.ER2CNC_ROLE()) kind = 'er2cncRole';
-
-  return {
-    kind,
-    name,
-    source: makeSourceLocation(ctx, file),
-  };
+  return { kind: 'model', name, source } satisfies ModelDef;
 }
 
 function makeSourceLocation(
-  ctx: { start: { line: number; column: number } | null; stop?: { line: number; column: number } | null },
+  ctx: { start?: { line: number; column: number; start: number } | null; stop?: { line: number; column: number; start: number; stop: number } | null },
   file: string
 ): SourceLocation {
-  const start = ctx.start ?? { line: 1, column: 1 };
-  const end = ctx.stop ?? start;
+  const startToken = ctx.start ?? { line: 1, column: 0, start: 0 };
+  const stopToken = ctx.stop ?? { line: startToken.line, column: startToken.column, start: startToken.start, stop: startToken.start - 1 };
+  const stopTokenLength = stopToken.stop - stopToken.start + 1;
   return {
     file,
-    line: start.line,
-    column: start.column,
-    endLine: end.line,
-    endColumn: end.column + 1,
-    offsetStart: 0,
-    offsetEnd: 0,
+    line: startToken.line,
+    column: startToken.column,
+    endLine: stopToken.line,
+    endColumn: stopToken.column + stopTokenLength,
+    offsetStart: startToken.start,
+    offsetEnd: stopToken.stop + 1,
   };
 }

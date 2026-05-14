@@ -34,3 +34,7 @@ Compares local and remote grammar files by hash. Exits non-zero if they differ.
 ## Policy
 
 The grammar file lives here (canonical source). Any changes to the grammar must be made here and then propagated via `sync-to-ai-platform.sh` to ai-platform.
+
+The grammar is **target-neutral** — it contains no `options { language = ... }` block, so it can be vendored into ai-platform's Kotlin ANTLR4 toolchain without modification.
+
+The TypeScript target is selected via the `-Dlanguage=TypeScript` flag in `generate-typescript-parser.sh`. The same grammar fed to a Java/Kotlin ANTLR4 toolchain (with no `-D` override) produces the Kotlin parser.

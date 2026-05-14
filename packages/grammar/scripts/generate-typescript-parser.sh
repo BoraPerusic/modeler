@@ -17,5 +17,5 @@ fi
 rm -rf "$OUTPUT_DIR"/*.ts "$OUTPUT_DIR"/*.interp "$OUTPUT_DIR"/*.tokens 2>/dev/null || true
 
 cd "$GRAMMAR_DIR/.."
-npx antlr-ng -o "$OUTPUT_DIR" -l -v -- "$GRAMMAR_FILE"
+npx antlr-ng -o "$OUTPUT_DIR" -l -v -Dlanguage=TypeScript -- "$GRAMMAR_FILE"
 echo "Parser generated to $OUTPUT_DIR"

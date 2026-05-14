@@ -1,0 +1,80 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project
+
+Tatrman Modeler — editor-side tooling for the TTR modeling language. Delivers a VS Code plugin, a static React graphical designer, and (later) an IntelliJ plugin, all sharing one TypeScript LSP server. TTR itself is consumed at runtime by `ai-platform` (separate repo); this repo is editor tooling only and never talks to that service.
+
+Authoritative design and decisions live in `docs/design/architecture.md` — read it before making non-trivial architectural changes. The phased plan is in `docs/plan/implementation-plan.md`.
+
+## Commands
+
+Workspace uses pnpm 11 (see `packageManager`). Node 20+ required.
+
+| Command | Purpose |
+|---|---|
+| `pnpm install` | Install all workspace deps |
+| `pnpm -r build` | Build every package (`tsc`, plus `esbuild` bundles for `@modeler/lsp`) |
+| `pnpm -r test` | Run all Vitest suites across packages |
+| `pnpm -r typecheck` | Type-check without emitting |
+| `pnpm -r lint` | Lint all packages |
+| `pnpm --filter @modeler/<pkg> test` | Run one package's tests |
+| `pnpm --filter @modeler/<pkg> test -- <pattern>` | Run a single test file/name |
+| `pnpm --filter @modeler/designer dev` | Run the Designer dev server (Vite, http://localhost:5173) |
+
+### Grammar regeneration
+
+`packages/grammar/src/TTR.g4` is the canonical grammar. After editing it:
+
+1. `cd packages/parser && pnpm run prebuild` — regenerates `packages/parser/src/generated/*` via `antlr-ng` (script: `packages/grammar/scripts/generate-typescript-parser.sh`). The `prebuild` hook runs automatically before `pnpm --filter @modeler/parser build`.
+2. `cd packages/vscode-ext && node scripts/generate-tm-grammar.ts` — regenerates the TextMate grammar used by the VS Code extension for syntax highlighting.
+3. Commit the generated files alongside the grammar change.
+
+The grammar is also vendored into the `ai-platform` repo. `packages/grammar/scripts/sync-to-ai-platform.sh <ai-platform-path>` copies it; `check-sync.sh <ai-platform-path>` verifies hashes match. ai-platform's Kotlin parser regenerates from its vendored copy.
+
+### Testing the VS Code extension
+
+Open `packages/vscode-ext` in VS Code and press F5 to launch an Extension Development Host, then open any `.ttr` file.
+
+## Architecture
+
+This is a pnpm workspaces monorepo. All TS packages extend `tsconfig.base.json` (strict, ES2022, Node16 modules, ESM). Source goes in `src/`, output in `dist/`. Tests live in `src/__tests__/*.test.ts` and use Vitest.
+
+### Dependency graph (one-way)
+
+```
+grammar  →  parser  →  semantics  →  lsp  →  vscode-ext
+                                      ↑   ↘
+                                      edit   designer
+```
+
+- **`@modeler/grammar`** — owns `TTR.g4` and the generation/sync scripts. No runtime logic.
+- **`@modeler/parser`** — wraps the generated antlr4ng parser; exposes `parseString` / `parseFile` returning `{ ast, errors, source }`. Cross-references are kept as opaque strings here (resolved later). Also exposes a CST view with trivia, used by the edit synthesizer.
+- **`@modeler/semantics`** — symbol table + reference resolver + per-kind validator. Pre-loads ai-platform's stock CNC vocab (`fact`, `dimension`, `structural`, `master`, `transaction`, `bridge`). This is where "unresolved reference"-class diagnostics come from.
+- **`@modeler/edit`** — `WorkspaceEdit` synthesizer for structured graph operations from the Designer (placeholder until v1.1 when edit mode lands).
+- **`@modeler/lsp`** — the single LSP server consumed by all hosts. Two entry points bundled with esbuild:
+  - `server-stdio.ts` → Node child process for VS Code / IntelliJ
+  - `server-browser.ts` → Web Worker for the Designer
+  Implements standard LSP methods plus custom `modeler/*` methods (`getModelGraph`, `applyGraphEdit`, `getLayout`/`setLayout`, `getProjectInfo`) for Designer use.
+- **`@modeler/vscode-ext`** — thin shim: language registration, TextMate grammar, LSP client wiring, one stub command. No business logic here — anything understanding TTR belongs in the LSP.
+- **`@modeler/designer`** — React 19 + Vite + Cytoscape.js + Tailwind. Forked from the Ontology Playground project. v1 is read-only render of `db` / `er` schemas; edit mode (round-tripping through `modeler/applyGraphEdit`) lands in v1.1.
+
+### Key invariants
+
+- **Text is canonical.** The Designer never owns model state independently — it issues structured edits via custom LSP requests, the LSP synthesizes `WorkspaceEdit`s, the host applies them, and the LSP re-parses. Node positions are sidecar data, stored in `<project-root>/.modeler/layout.ttrl` and managed by the LSP (hosts never touch this file directly).
+- **One LSP across hosts.** Don't add per-host language logic. New language features go in `parser` / `semantics` / `lsp`; hosts stay thin.
+- **Parser stays mechanical.** It mirrors ai-platform's Kotlin parser. Don't add resolution logic to `@modeler/parser` — that belongs in `@modeler/semantics`.
+- **Project root resolution.** Walk up looking for `modeler.toml`; otherwise treat the LSP `workspaceFolder` as root with convention defaults. Manifest schema is in §5 of the architecture doc.
+- **Source locations on every AST node.** The edit synthesizer relies on file/line/column/offsets being present and accurate for surgical text patches.
+
+### Cross-package integration tests
+
+`tests/integration/` is its own workspace member (`@modeler/integration-tests`); it depends on the built packages and runs end-to-end scenarios via Vitest. Run with `pnpm --filter @modeler/integration-tests test`.
+
+## Conventions
+
+- All packages are ESM (`"type": "module"`); use `.js` extensions in relative TS imports as Node16 resolution requires.
+- Add a new package under `packages/<name>/`, name it `@modeler/<name>`, extend `tsconfig.base.json`, and wire workspace deps with `workspace:*`. `pnpm-workspace.yaml` already globs `packages/*`.
+- Commit style follows `Section <X>: <description>` for phased plan work (see recent history). Don't squash unrelated changes.
+- ESLint forbids `any` outside `generated/**` (`packages/parser/src/generated/` is exempt).

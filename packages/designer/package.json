@@ -7,13 +7,16 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src"
   },
   "dependencies": {
     "@modeler/lsp": "workspace:*",
+    "cytoscape": "^3.30.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "cytoscape": "^3.30.0"
+    "vscode-jsonrpc": "^8.2.1",
+    "vscode-languageserver-protocol": "^3.17.5"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

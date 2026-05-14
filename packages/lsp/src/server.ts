@@ -1,19 +1,19 @@
 import {
   createConnection,
-  ProposedFeatures,
   InitializeParams,
   InitializeResult,
   TextDocuments,
   Diagnostic,
   DiagnosticSeverity,
+  TextDocumentChangeEvent,
+  Connection,
 } from 'vscode-languageserver';
+import { TextDocument } from 'vscode-languageserver-textdocument';
 import { parseString } from '@modeler/parser';
 import type { ParseError } from '@modeler/parser';
 
-export function runServer(): void {
-  const connection = (createConnection as any)();
-
-  const documents: any = new (TextDocuments as any)(undefined);
+export function createServerConnection(connection: Connection): void {
+  const documents = new TextDocuments(TextDocument);
 
   connection.onInitialize((_params: InitializeParams): InitializeResult => {
     return {
@@ -48,14 +48,14 @@ export function runServer(): void {
     connection.sendDiagnostics({ uri, diagnostics });
   }
 
-  documents.onDidOpen((event: any) => {
+  documents.onDidOpen((event: TextDocumentChangeEvent<TextDocument>) => {
     const doc = documents.get(event.document.uri);
     if (doc) {
       publishDiagnostics(event.document.uri, doc.getText());
     }
   });
 
-  documents.onDidChangeContent((event: any) => {
+  documents.onDidChangeContent((event: TextDocumentChangeEvent<TextDocument>) => {
     publishDiagnostics(event.document.uri, event.document.getText());
   });
 
@@ -90,6 +90,15 @@ export function runServer(): void {
   });
 
   documents.listen(connection);
+}
 
+export function runServer(): void {
+  /* eslint-disable @typescript-eslint/no-explicit-any */
+  const connection = createConnection(
+    process.stdin as any,
+    process.stdout as any
+  ) as Connection;
+  /* eslint-enable @typescript-eslint/no-explicit-any */
+  createServerConnection(connection);
   connection.listen();
 }

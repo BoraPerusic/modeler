@@ -15,7 +15,8 @@
     "prebuild": "bash ../grammar/scripts/generate-typescript-parser.sh",
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "lint": "eslint src"
   },
   "dependencies": {
     "antlr4ng": "^3.0.0"

@@ -9,13 +9,13 @@ The build is organized into six phases, executed mostly sequentially with one pa
 | Phase | Goal | Time | Dependencies |
 |---|---|---|---|
 | 0 | Vertical thin slice end-to-end | 1–2 weeks | None |
-| 1 | Foundation tier complete (highlighting, syntax diagnostics, language config) | 1 week | Phase 0 |
+| 1 | Foundation tier complete (highlighting, syntax diagnostics, language config, .ttrl support, diagnostic taxonomy, semantic tokens, parser error recovery, ai-platform sync CI, VS Code smoke test) | 1.5–2 weeks | Phase 0 (post review-001 P0 fixes) |
 | 2 | Core tier (semantics, resolver, go-to-def, find-refs, hover, undefined-ref diagnostics) | 3–4 weeks | Phase 0 (parser/AST), Phase 1 |
 | 3 | Designer v1 (read-only, db + er, schema/detail toggles, layout persistence) | 3–4 weeks | Phase 0, Phase 2 (semantics over LSP) |
 | 4 | IntelliJ plugin v1 (LSP4IJ wrapper, file-type registration, bundled runtime) | 1–2 weeks | Phase 2 |
 | 5 | Hardening, packaging, distribution, docs | 1–2 weeks | Phases 1–4 |
 
-Total wall-clock estimate: **10–15 weeks** for v1, assuming one full-time developer plus Bora reviewing. Parallelization (e.g. Phase 3 starting once Phase 2 is half-done) can compress this to 8–10 weeks.
+Total wall-clock estimate: **10.5–15.5 weeks** for v1, assuming one full-time developer plus Bora reviewing. Parallelization (e.g. Phase 3 starting once Phase 2 is half-done) can compress this to 8.5–10.5 weeks.
 
 ## Phase 0 — vertical thin slice (1–2 weeks)
 
@@ -34,19 +34,29 @@ Total wall-clock estimate: **10–15 weeks** for v1, assuming one full-time deve
 
 Detailed task breakdown in `tasks-phase-00-thin-slice.md`. After Phase 0, the developer can demo end-to-end: open a `.ttr` file, see highlighting, save with a typo to see a diagnostic, switch to the Designer to see the model nodes rendered.
 
-## Phase 1 — Foundation tier complete (1 week)
+## Phase 1 — Foundation tier complete (1.5–2 weeks)
 
-**Goal**: VS Code plugin ships every Foundation-tier feature.
+**Detailed task list:** [`tasks-phase-01-foundation.md`](tasks-phase-01-foundation.md).
 
-**Deliverables**:
-- TextMate grammar covers every token in the grammar (not just the v0 subset Phase 0 generated)
-- Language configuration: bracket pairs, comment toggle (`//` and `/* */`), auto-close, indentation rules tuned for `def <kind> { ... }` and inline lists
-- Semantic tokens via LSP for tokens that TextMate can't disambiguate (e.g. dotted ids where one part is a schema-code keyword)
-- Document selectors: `.ttr` and `.ttrl` both registered
-- File icons (small modeler-themed icon set; one for `.ttr`, one for `.ttrl`)
-- Diagnostic categories: `parse-error` (existing) + `unknown-property` (the parser already rejects these) + `parse-recovery-info` (new) emitted as `Information`-severity hints when error recovery synthesized a node
+**Goal**: take Phase 0's vertical thin slice from "the wire works" to "every file under `samples/` looks and behaves like a real language file in any LSP host." Phase 1 is still pre-semantics; symbol table, references, and navigation land in Phase 2.
 
-**Acceptance**: every sample file in `samples/` opens and is highlighted correctly; deliberately-broken variants of each sample produce useful diagnostics.
+**Deliverables** (sectioned in the task list as A–L):
+- **A** Carryover cleanup from review-001 P1/P2: `Definition` discriminated union, `.gitignore` fix, parser tsconfig + ESLint exclusions, JSDoc on `SourceLocation`, `grammar/index.ts` path cleanup, unused-import sweep, parser-test path robustness
+- **B** TextMate grammar full coverage: rebuild the generator to walk the grammar's lexer rules and emit a categorized scope set (keywords, kinds, properties, primitives, constants, strings, numbers, comments, definition names, qnames, punctuation); CI guard against stale generated output
+- **C** Full language configuration: `wordPattern` honoring Czech/Latin Extended identifiers, `indentationRules`, `onEnterRules` for `def { … }` blocks
+- **D** `.ttrl` layout sidecar support: separate language registration, JSON-schema validation, LSP gates parse-as-TTR off for `.ttrl` files
+- **E** Diagnostic taxonomy: stable codes (`ttr/parse-error`, `ttr/unknown-property`, `ttr/parse-recovery-info`) with `source: 'modeler'`; documented in `docs/design/diagnostics.md`
+- **F** Parser error recovery: tune ANTLR's recovery so common-typo broken inputs still yield useful partial ASTs; emit `parse-recovery-info` at recovery boundaries
+- **G** Semantic tokens via LSP: cover the cases TextMate can't disambiguate (dotted ids with keyword fragments, definition names with non-IDENT characters)
+- **H** File icons: one for `.ttr`, one for `.ttrl`, bound to the language ids
+- **I** ai-platform sync CI integration: cross-repo PR check that fails on grammar drift
+- **J** VS Code smoke test (`@vscode/test-electron`): boot a real VS Code instance, open a sample, assert language detection and diagnostic flow
+- **K** Broken-sample fixtures (`samples/broken/`): one per defect category, consumed by integration tests
+- **L** Documentation: progress doc, diagnostics catalog, architecture-doc updates, vscode-ext README
+
+**Acceptance**: every sample in `samples/v1-metadata/` opens and is highlighted correctly across every category; brackets/comments/indentation behave; each `samples/broken/` defect produces the expected diagnostic with the expected code; `.ttrl` files highlight as JSON with schema validation; cross-repo grammar-sync CI passes; VS Code smoke test green.
+
+**Note on scope expansion vs the original 1-week estimate**: the bump to 1.5–2 weeks absorbs (a) the review-001 P1/P2 carryover (sections A and parts of B/C), (b) parser error recovery (Section F — needed for `parse-recovery-info` to be more than a formality), and (c) the cross-repo sync CI (Section I — deferred from Phase 0). The substantive Foundation-tier work itself is roughly the original 1-week estimate; carryover and infrastructure account for the rest.
 
 ## Phase 2 — Core tier (3–4 weeks)
 

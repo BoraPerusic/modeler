@@ -4,4 +4,4 @@ dist/
 .vscode-test/
 .pnpm-store/
 generated/
-*.ttrl
+/*.ttrl
