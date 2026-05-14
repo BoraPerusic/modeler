@@ -2,6 +2,7 @@ import {
   InitializeParams,
   InitializeResult,
   TextDocuments,
+  TextDocumentSyncKind,
   Diagnostic,
   DiagnosticSeverity,
   TextDocumentChangeEvent,
@@ -22,7 +23,7 @@ export function createServerConnection(connection: Connection): void {
           openClose: true,
           willSave: false,
           save: false,
-          change: 1,
+          change: TextDocumentSyncKind.Full,
         },
       },
     };
@@ -33,17 +34,26 @@ export function createServerConnection(connection: Connection): void {
   });
 
   function publishDiagnostics(uri: string, content: string): void {
+    if (uri.endsWith('.ttrl')) return;
+
     const result = parseString(content, uri);
 
-    const diagnostics: Diagnostic[] = result.errors.map((err: ParseError) => ({
-      range: {
-        start: { line: err.source.line - 1, character: err.source.column },
-        end: { line: err.source.endLine - 1, character: err.source.endColumn },
-      },
-      message: err.message,
-      severity: err.severity === 'error' ? DiagnosticSeverity.Error : DiagnosticSeverity.Warning,
-      source: 'ttr',
-    }));
+    const diagnostics: Diagnostic[] = result.errors.map((err: ParseError) => {
+      const sev = err.severity === 'warning'
+        ? DiagnosticSeverity.Warning
+        : DiagnosticSeverity.Error;
+
+      return {
+        range: {
+          start: { line: err.source.line - 1, character: err.source.column },
+          end: { line: err.source.endLine - 1, character: err.source.endColumn },
+        },
+        message: err.message,
+        severity: sev,
+        code: err.code,
+        source: 'modeler',
+      } satisfies Diagnostic;
+    });
 
     connection.sendDiagnostics({ uri, diagnostics });
   }

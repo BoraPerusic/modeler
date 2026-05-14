@@ -1,17 +1,20 @@
 import { describe, it, expect } from 'vitest';
 import { parseString, parseFile } from '../index.js';
+import { DiagnosticCode } from '../diagnostics.js';
+import { RECOVERY_FIXTURES } from './recovery-fixtures.js';
 import path from 'path';
 import fs from 'fs/promises';
 
 const samplesDir = path.resolve(__dirname, '../../../../samples');
 
-async function getAllTtrFiles(dir: string): Promise<string[]> {
+async function getAllTtrFiles(dir: string, excludeDirs: string[] = []): Promise<string[]> {
   const results: string[] = [];
   const entries = await fs.readdir(dir, { withFileTypes: true });
   for (const entry of entries) {
     const fullPath = path.join(dir, entry.name);
     if (entry.isDirectory()) {
-      results.push(...await getAllTtrFiles(fullPath));
+      if (excludeDirs.includes(entry.name)) continue;
+      results.push(...await getAllTtrFiles(fullPath, excludeDirs));
     } else if (entry.isFile() && entry.name.endsWith('.ttr')) {
       results.push(fullPath);
     }
@@ -88,11 +91,35 @@ describe('parseFile', () => {
   });
 
   it('parses all sample files without errors', async () => {
-    const ttrFiles = await getAllTtrFiles(samplesDir);
+    const ttrFiles = await getAllTtrFiles(samplesDir, ['broken']);
 
     for (const file of ttrFiles) {
       const result = await parseFile(file);
       expect(result.errors, `Errors in ${file}: ${result.errors.map((e) => e.message).join(', ')}`).toHaveLength(0);
     }
   });
+});
+
+describe('parser error recovery', () => {
+  for (const fixture of RECOVERY_FIXTURES) {
+    it(`"${fixture.name}": ${fixture.description} — ${
+      fixture.expectErrors ? 'produces ttr/parse-error' : 'parses without ttr/parse-error (grammar is permissive)'
+    }`, () => {
+      const result = parseString(fixture.input);
+      if (fixture.expectErrors) {
+        expect(result.errors.length, `"${fixture.name}" should have errors`).toBeGreaterThanOrEqual(1);
+        const hasParseError = result.errors.some((e) => e.code === DiagnosticCode.ParseError);
+        expect(hasParseError, `"${fixture.name}" should have at least one ttr/parse-error`).toBe(true);
+      } else {
+        const hasParseError = result.errors.some((e) => e.code === DiagnosticCode.ParseError);
+        expect(hasParseError).toBe(false);
+      }
+    });
+
+    it(`"${fixture.name}": ${fixture.description} — produces ${fixture.expectedRecoveredDefs} recovered defs`, () => {
+      const result = parseString(fixture.input);
+      const defs = result.ast?.definitions ?? [];
+      expect(defs.length).toBe(fixture.expectedRecoveredDefs);
+    });
+  }
 });

@@ -1,4 +1,5 @@
 export { parseString, parseFile } from './walker.js';
+export { DiagnosticCode } from './diagnostics.js';
 export type {
   Document,
   Definition,

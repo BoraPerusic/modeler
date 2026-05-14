@@ -52,7 +52,7 @@ describe('lsp', () => {
     expect(result.capabilities.textDocumentSync.change).toBe(1);
   });
 
-  it('textDocument/didOpen with malformed content publishes a diagnostic', async () => {
+  it('textDocument/didOpen with malformed content publishes a diagnostic with code and source', async () => {
     await clientConnection.sendRequest('initialize', {
       processId: null,
       rootUri: null,
@@ -77,6 +77,9 @@ describe('lsp', () => {
 
     const diagnostics = await diagnosticsPromise;
     expect(diagnostics.diagnostics.length).toBeGreaterThan(0);
+    const diag = diagnostics.diagnostics[0] as { code?: string; source?: string };
+    expect(diag.code).toBe('ttr/parse-error');
+    expect(diag.source).toBe('modeler');
   });
 
   it('modeler/getModelGraph returns expected stub nodes after didOpen', async () => {
@@ -105,5 +108,31 @@ describe('lsp', () => {
     expect(result.nodes).toHaveLength(1);
     expect(result.nodes[0]).toEqual({ qname: 'foo', kind: 'entity', label: 'foo' });
     expect(result.edges).toEqual([]);
+  });
+
+  it('textDocument/didOpen with .ttrl file produces no diagnostics', async () => {
+    await clientConnection.sendRequest('initialize', {
+      processId: null,
+      rootUri: null,
+      capabilities: {},
+    });
+    clientConnection.sendNotification('initialized', {});
+
+    let diagnosticsReceived = false;
+    clientConnection.onNotification('textDocument/publishDiagnostics', () => {
+      diagnosticsReceived = true;
+    });
+
+    clientConnection.sendNotification('textDocument/didOpen', {
+      textDocument: {
+        uri: 'file:///test.ttrl',
+        languageId: 'ttrl',
+        version: 1,
+        text: '{ "version": 1, "nodes": {} }',
+      },
+    });
+
+    await sleep(50);
+    expect(diagnosticsReceived).toBe(false);
   });
 });

@@ -9,7 +9,8 @@
     "test": "pnpm -r test",
     "lint": "pnpm -r lint",
     "format": "pnpm -r format",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm -r typecheck",
+    "sync-ai-platform": "bash packages/grammar/scripts/sync-to-ai-platform.sh \"$AI_PLATFORM_PATH\""
   },
   "engines": {
     "node": ">=20.0.0"

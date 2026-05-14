@@ -8,13 +8,19 @@
   "engines": {
     "vscode": "^1.85.0"
   },
-  "categories": ["Programming Languages", "Formatters"],
+  "categories": [
+    "Programming Languages",
+    "Formatters"
+  ],
   "main": "./dist/extension.js",
   "scripts": {
     "build": "pnpm run copy-server && tsc",
     "copy-server": "node --input-type=module -e \"import fs from 'fs'; import path from 'path'; import { fileURLToPath } from 'url'; const __dirname = path.dirname(fileURLToPath(import.meta.url)); const src = path.resolve(__dirname, '../lsp/dist/server-stdio.js'); const dst = path.join(__dirname, 'dist', 'server-stdio.js'); fs.mkdirSync(path.dirname(dst), {recursive:true}); fs.copyFileSync(src, dst);\"",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src"
+    "lint": "eslint src",
+    "test": "vitest run",
+    "build-generator": "tsc scripts/generate-tm-grammar.ts --outDir scripts --module nodenext --target es2022 --moduleResolution nodenext",
+    "regen-tmgrammar": "pnpm run build-generator && node scripts/generate-tm-grammar.js"
   },
   "dependencies": {
     "@modeler/lsp": "workspace:*",
@@ -24,7 +30,8 @@
     "@types/node": "^22.0.0",
     "@types/vscode": "^1.85.0",
     "@vscode/test-electron": "^2.3.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "vitest": "^3.2.4"
   },
   "contributes": {
     "languages": [
@@ -32,12 +39,22 @@
         "id": "ttr",
         "extensions": [".ttr"],
         "aliases": ["TTR"],
-        "configuration": "./language-configuration.json"
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light": "./icons/ttr.svg",
+          "dark": "./icons/ttr.svg"
+        }
       },
       {
         "id": "ttrl",
         "extensions": [".ttrl"],
-        "aliases": ["TTR Layout"]
+        "aliases": ["TTR Layout"],
+        "mimetypes": ["application/ttrl+json"],
+        "configuration": "./language-configuration-ttrl.json",
+        "icon": {
+          "light": "./icons/ttrl.svg",
+          "dark": "./icons/ttrl.svg"
+        }
       }
     ],
     "grammars": [
@@ -45,6 +62,17 @@
         "language": "ttr",
         "scopeName": "source.ttr",
         "path": "./syntaxes/ttr.tmLanguage.json"
+      },
+      {
+        "language": "ttrl",
+        "scopeName": "source.ttrl",
+        "path": "./syntaxes/ttrl.tmLanguage.json"
+      }
+    ],
+    "jsonValidation": [
+      {
+        "fileMatch": "*.ttrl",
+        "url": "./schemas/ttrl.schema.json"
       }
     ],
     "configuration": {
@@ -53,7 +81,11 @@
       "properties": {
         "ttr.trace.server": {
           "type": "string",
-          "enum": ["off", "messages", "verbose"],
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
           "default": "off",
           "description": "Traces the communication between VS Code and the TTR language server."
         }
@@ -67,5 +99,7 @@
       }
     ]
   },
-  "activationEvents": ["onLanguage:ttr"]
+  "activationEvents": [
+    "onLanguage:ttr"
+  ]
 }

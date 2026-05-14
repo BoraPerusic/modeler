@@ -153,6 +153,7 @@ export interface Document {
 }
 
 export interface ParseError {
+  code?: string;
   message: string;
   severity: 'error' | 'warning';
   source: SourceLocation;

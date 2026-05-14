@@ -34,6 +34,7 @@ import type {
   RoleDef,
   Er2cncRoleDef,
 } from './ast.js';
+import { DiagnosticCode } from './diagnostics.js';
 
 class DiagnosticErrorListener implements ANTLRErrorListener {
   private errors: ParseError[];
@@ -54,6 +55,7 @@ class DiagnosticErrorListener implements ANTLRErrorListener {
   ): void {
     const symbol = _offendingSymbol;
     this.errors.push({
+      code: DiagnosticCode.ParseError,
       message: msg,
       severity: 'error',
       source: {

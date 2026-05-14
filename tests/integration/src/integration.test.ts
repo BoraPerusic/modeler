@@ -3,18 +3,21 @@ import { parseFile } from '@modeler/parser';
 import * as lsp from 'vscode-languageserver/node';
 import { PassThrough } from 'stream';
 import { createServerConnection } from '@modeler/lsp/server';
+import { DiagnosticCode } from '@modeler/parser';
 import path from 'path';
 
 const samplesDir = path.resolve(__dirname, '../../../samples');
+const brokenDir = path.resolve(samplesDir, 'broken');
 
-async function getAllTtrFiles(dir: string): Promise<string[]> {
+async function getAllTtrFiles(dir: string, excludeDirs: string[] = []): Promise<string[]> {
   const results: string[] = [];
   const fs = await import('fs/promises');
   const entries = await fs.readdir(dir, { withFileTypes: true });
   for (const entry of entries) {
     const fullPath = path.join(dir, entry.name);
     if (entry.isDirectory()) {
-      results.push(...await getAllTtrFiles(fullPath));
+      if (excludeDirs.includes(entry.name)) continue;
+      results.push(...await getAllTtrFiles(fullPath, excludeDirs));
     } else if (entry.isFile() && entry.name.endsWith('.ttr')) {
       results.push(fullPath);
     }
@@ -45,14 +48,16 @@ async function sleep(ms: number): Promise<void> {
 }
 
 describe('parser integration', () => {
-  let ttrFiles: string[];
+  let sampleFiles: string[];
+  let brokenFiles: string[];
 
   beforeAll(async () => {
-    ttrFiles = await getAllTtrFiles(samplesDir);
+    sampleFiles = await getAllTtrFiles(samplesDir, ['broken']);
+    brokenFiles = await getAllTtrFiles(brokenDir);
   });
 
-  it('parses all sample files without errors', async () => {
-    for (const file of ttrFiles) {
+  it('parses all sample files (non-broken) without errors', async () => {
+    for (const file of sampleFiles) {
       const result = await parseFile(file);
       expect(result.errors, `Errors in ${file}: ${result.errors.map(e => e.message).join(', ')}`).toHaveLength(0);
     }
@@ -64,15 +69,24 @@ describe('parser integration', () => {
     const entities = result.ast?.definitions.filter(d => d.kind === 'entity') ?? [];
     expect(entities.length).toBeGreaterThan(0);
   });
+
+  it('broken fixtures produce ttr/parse-error diagnostics', async () => {
+    for (const file of brokenFiles) {
+      const result = await parseFile(file);
+      expect(result.errors.length, `Expected errors in ${file}`).toBeGreaterThanOrEqual(1);
+      const hasParseError = result.errors.some(e => e.code === DiagnosticCode.ParseError);
+      expect(hasParseError, `Expected ttr/parse-error in ${file}: ${result.errors.map(e => e.code).join(', ')}`).toBe(true);
+    }
+  });
 });
 
 describe('lsp integration', () => {
-  let ttrFiles: string[];
+  let sampleFiles: string[];
   let clientConnection: lsp.Connection;
   let serverConnection: lsp.Connection;
 
   beforeAll(async () => {
-    ttrFiles = await getAllTtrFiles(samplesDir);
+    sampleFiles = await getAllTtrFiles(samplesDir, ['broken']);
     const { client, server } = createPairedConnection();
     clientConnection = client;
     serverConnection = server;
