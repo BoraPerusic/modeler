@@ -1,0 +1,5 @@
+packages:
+  - 'packages/*'
+  - 'tests/integration'
+allowBuilds:
+  esbuild: true

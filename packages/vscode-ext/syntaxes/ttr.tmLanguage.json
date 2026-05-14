@@ -1,0 +1,110 @@
+{
+  "name": "TTR",
+  "fileTypes": [
+    "ttr"
+  ],
+  "scopeName": "source.ttr",
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#numbers"
+    },
+    {
+      "include": "#keywords"
+    },
+    {
+      "include": "#operators"
+    }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.ttr",
+          "match": "//.*$"
+        },
+        {
+          "name": "comment.block.ttr",
+          "begin": "/\\*",
+          "end": "\\*/"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.ttr",
+          "begin": "\"",
+          "end": "\"(?=[^\\\\])",
+          "patterns": [
+            {
+              "name": "constant.character.escape.ttr",
+              "match": "\\\\."
+            }
+          ]
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.ttr",
+          "match": "-?[0-9]+(\\.[0-9]+)?([eE][+-]?[0-9]+)?"
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.ttr",
+          "match": "\\b(def|schema|namespace|primaryKey|columns|indices|constraints|attributes|from|to|join|type|search|keywords|patterns|descriptions|examples)\\b"
+        },
+        {
+          "name": "keyword.entity.ttr",
+          "match": "\\b(db|er|map|cnc|model|table|view|column|index|constraint|fk|procedure|entity|attribute|relation|query|role|er2db_entity|er2db_attribute|er2db_relation|er2cnc_role|description|tags|version|optional|isKey|searchable|indexed|labelPlural|nameAttribute|codeAttribute|aliases|cardinality|target|whereFilter|language|sourceText|length|precision|label|name|direction|displayLabel|valueLabels|roles|search|examples)\\b"
+        },
+        {
+          "name": "keyword.type.ttr",
+          "match": "\\b(text|int|float|bool|datetime|string|boolean|number|integer|double|object|list|char|varchar|decimal|date|timestamp|primary|secondary|ordered|btree|fulltext|unique|notNull|SQL|TRANSFORMATION_DSL|DATAFRAME_DSL|REL_NODE)\\b"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "punctuation.equals.ttr",
+          "match": "="
+        },
+        {
+          "name": "punctuation.colon.ttr",
+          "match": ":"
+        },
+        {
+          "name": "punctuation.comma.ttr",
+          "match": ","
+        },
+        {
+          "name": "punctuation.braces.ttr",
+          "match": "[{}]"
+        },
+        {
+          "name": "punctuation.brackets.ttr",
+          "match": "[\\[\\]]"
+        },
+        {
+          "name": "punctuation.parenthesis.ttr",
+          "match": "[()]"
+        },
+        {
+          "name": "punctuation.dot.ttr",
+          "match": "\\."
+        }
+      ]
+    }
+  }
+}

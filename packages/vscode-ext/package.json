@@ -1,0 +1,71 @@
+{
+  "name": "@modeler/vscode-ext",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "displayName": "TTR Modeler",
+  "description": "Language support for TTR (Tatrman) modeling language",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Programming Languages", "Formatters"],
+  "main": "./dist/extension.js",
+  "scripts": {
+    "build": "pnpm run copy-server && tsc",
+    "copy-server": "node --input-type=module -e \"import fs from 'fs'; import path from 'path'; import { fileURLToPath } from 'url'; const __dirname = path.dirname(fileURLToPath(import.meta.url)); const src = path.resolve(__dirname, '../lsp/dist/server-stdio.js'); const dst = path.join(__dirname, 'dist', 'server-stdio.js'); fs.mkdirSync(path.dirname(dst), {recursive:true}); fs.copyFileSync(src, dst);\"",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "@modeler/lsp": "workspace:*",
+    "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/test-electron": "^2.3.0",
+    "typescript": "^5.7.0"
+  },
+  "contributes": {
+    "languages": [
+      {
+        "id": "ttr",
+        "extensions": [".ttr"],
+        "aliases": ["TTR"],
+        "configuration": "./language-configuration.json"
+      },
+      {
+        "id": "ttrl",
+        "extensions": [".ttrl"],
+        "aliases": ["TTR Layout"]
+      }
+    ],
+    "grammars": [
+      {
+        "language": "ttr",
+        "scopeName": "source.ttr",
+        "path": "./syntaxes/ttr.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "type": "object",
+      "title": "TTR Language",
+      "properties": {
+        "ttr.trace.server": {
+          "type": "string",
+          "enum": ["off", "messages", "verbose"],
+          "default": "off",
+          "description": "Traces the communication between VS Code and the TTR language server."
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "modeler.openInDesigner",
+        "title": "Open in Designer",
+        "description": "Opens the current TTR file in the graphical designer."
+      }
+    ]
+  },
+  "activationEvents": ["onLanguage:ttr"]
+}
