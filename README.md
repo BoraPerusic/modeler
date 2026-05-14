@@ -1,4 +1,4 @@
-# Tatrman  Modeler
+# Tatrman Modeler
 
 This folder contains the support for the Tatrman modeling language, TTR.
 
@@ -47,3 +47,75 @@ Standard language properties
 2. Graphical Designer
 3. IntelliJ
 
+## Architecture
+
+See [docs/design/architecture.md](docs/design/architecture.md) for the full architecture and design decisions.
+
+## Implementation Plan
+
+See [docs/plan/implementation-plan.md](docs/plan/implementation-plan.md) for the phased implementation plan.
+
+## Developing Locally
+
+### Prerequisites
+
+- Node.js 20+
+- pnpm 9+
+
+### Setup
+
+```bash
+# Install dependencies
+pnpm install
+
+# Build all packages
+pnpm -r build
+
+# Run tests
+pnpm -r test
+
+# Lint all packages
+pnpm -r lint
+```
+
+### Key Commands
+
+| Command | Description |
+|---------|-------------|
+| `pnpm install` | Install all dependencies |
+| `pnpm -r build` | Build all packages |
+| `pnpm -r test` | Run all tests |
+| `pnpm -r lint` | Lint all packages |
+
+### Package Structure
+
+| Package | Purpose |
+|---------|---------|
+| `@modeler/grammar` | TTR.g4 grammar and sync scripts |
+| `@modeler/parser` | TypeScript parser generated from grammar |
+| `@modeler/semantics` | Symbol table, resolver, validator (Phase 2) |
+| `@modeler/edit` | WorkspaceEdit synthesizer (v1.1) |
+| `@modeler/lsp` | LSP server (stdio and browser transports) |
+| `@modeler/vscode-ext` | VS Code extension |
+| `@modeler/designer` | React-based graphical designer |
+
+### Testing the VS Code Extension
+
+1. Open `packages/vscode-ext` in VS Code
+2. Press F5 to launch Extension Development Host
+3. Open any `.ttr` file to test syntax highlighting and LSP diagnostics
+
+### Testing the Designer
+
+```bash
+cd packages/designer
+pnpm run dev
+```
+
+Opens on http://localhost:5173
+
+## Documentation
+
+- [docs/design/architecture.md](docs/design/architecture.md) — Architecture and design decisions
+- [docs/plan/implementation-plan.md](docs/plan/implementation-plan.md) — Phased implementation plan
+- [docs/plan/progress-phase-00.md](docs/plan/progress-phase-00.md) — Phase 0 progress tracking
