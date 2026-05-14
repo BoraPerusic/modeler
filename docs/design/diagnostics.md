@@ -41,6 +41,72 @@ These diagnostics are produced by the semantics layer (`@modeler/semantics`) and
 | `ttr/duplicate-definition` | Error | A qname is defined more than once in the same scope | Rename or remove the duplicate |
 | `ttr/required-property-missing` | Warning | A `def <kind>` is missing a required property for its kind | Add the required property |
 | `ttr/invalid-type` | Error | The value for `type:` is not a valid data type | Use a recognized type name or remove the property |
+| `ttr/entity-attribute-not-found` | Error | `nameAttribute` or `codeAttribute` points to an attribute that does not exist on the entity | Add the attribute or correct the path |
+| `ttr/primary-key-column-not-found` | Error | `primaryKey` lists a column that does not exist on the table | Add the column or update the primaryKey list |
+
+### `ttr/unresolved-reference`
+
+The resolver (`@modeler/semantics/src/resolver.ts`) emits this when a dotted reference cannot be resolved against the symbol table. This includes stock vocabulary references (e.g. `fact` in `roles: [fact]`) that don't match any loaded stock role.
+
+Example:
+```
+def entity orders {
+  roles: [fact_role]  # "fact_role" is not a known stock role
+}
+```
+
+### `ttr/duplicate-definition`
+
+The validator's `validateProject()` emits this when the symbol table contains multiple entries with the same fully-qualified name.
+
+Example:
+```
+# file1.ttr
+schema db { def table users { columns: [...] } }
+# file2.ttr
+schema db { def table users { columns: [...] } }  # duplicate db.users
+```
+
+### `ttr/required-property-missing`
+
+Emitted when a definition is missing a required property for its kind:
+- `entity` must have at least one `attributes` entry
+- `table` must have at least one `columns` entry
+- `column` must have a `type` property
+- `attribute` must have a `type` property
+- When `lint.requireDescriptions: true`, any definition missing `description` emits a warning
+
+### `ttr/invalid-type`
+
+Reserved for Phase 2 type validation. Currently the parser accepts any identifier as a type name; semantic validation of type names against declared schema types is Phase 2 work.
+
+### `ttr/entity-attribute-not-found`
+
+Emitted when `nameAttribute` or `codeAttribute` on an entity does not match any attribute in the entity's `attributes` list.
+
+Example:
+```
+def entity order {
+  nameAttribute: id_order  # "id_order" not in attributes list
+  attributes: [
+    def attribute id { type: integer }
+  ]
+}
+```
+
+### `ttr/primary-key-column-not-found`
+
+Emitted when `primaryKey` on a table lists a column name that doesn't exist in the table's `columns` list.
+
+Example:
+```
+def table orders {
+  primaryKey: [order_id]  # "order_id" not in columns list
+  columns: [
+    def column id { type: integer }
+  ]
+}
+```
 
 ---
 
@@ -55,8 +121,10 @@ The LSP maps parser codes to LSP severities as follows:
 | (Phase 2 codes) | |
 | `ttr/unresolved-reference` | `Warning` (configurable to `Error` via `[lint].strict`) |
 | `ttr/duplicate-definition` | `Error` |
-| `ttr/required-property-missing` | `Warning` |
+| `ttr/required-property-missing` | `Warning` (error for entity/table/column/attribute without type; warning for missing description) |
 | `ttr/invalid-type` | `Error` |
+| `ttr/entity-attribute-not-found` | `Error` |
+| `ttr/primary-key-column-not-found` | `Error` |
 
 All diagnostics carry `source: "modeler"` in the LSP `Diagnostic` payload. Phase 2 diagnostics may carry additional structured data in `data` fields for quick-fix actions.
 

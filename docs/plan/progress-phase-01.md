@@ -76,21 +76,22 @@
 
 ## Section K — Broken-sample fixtures
 - [x] `samples/broken/` directory created with 5 fixtures (not the planned 6;
-  `query-bad-language-value.ttr` missing)
+  `query-bad-language-value.ttr` missing — defer to Phase 2 if useful)
 - [x] Integration tests consume broken fixtures (`tests/integration/src/integration.test.ts`)
-- [ ] `db-missing-comma.ttr` content is unterminated bracket, not missing comma;
-  `db-trailing-comma.ttr` has missing comma, not trailing comma — name↔content
-  mismatch needs cleanup (post-Phase-1 cleanup)
+- [x] Fixture names ↔ contents ↔ README aligned (review-003 Task 14):
+  `db-trailing-comma.ttr` renamed to `db-unterminated-bracket.ttr`;
+  `db-missing-comma.ttr` content matches its name
 
 ## Section L — Documentation + progress
-- [x] `docs/design/diagnostics.md` created (note: the `ttr/parse-error` example
-  showing `bar: int` on entity is incorrect — that input parses cleanly; fix pending)
-- [ ] `docs/plan/progress-phase-01.md` updated as work lands (this file)
+- [x] `docs/design/diagnostics.md` created; example for `ttr/parse-error` shows
+  a real syntax error (unmatched `{`); `ttr/unknown-property` annotated as
+  reserved for Phase 2 (review-003 Tasks 8, 9)
+- [x] `docs/plan/progress-phase-01.md` updated as work lands (this file)
 - [ ] `packages/vscode-ext/README.md` with v1 feature list — not updated
 
-## Test Results (intermediate)
+## Test Results
 ```
-packages/parser:  29 tests passed (9 original + 20 recovery)
+packages/parser:  19 tests passed (9 original + 10 recovery — 5 fixtures × 2 tests)
 packages/semantics: 1 test passed
 packages/lsp:    4 tests passed (3 original + 1 ttrl gating)
 packages/vscode-ext: 6 tests passed (generator)

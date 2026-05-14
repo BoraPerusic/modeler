@@ -9,6 +9,7 @@
   "devDependencies": {
     "@modeler/lsp": "workspace:*",
     "@modeler/parser": "workspace:*",
+    "@modeler/semantics": "workspace:*",
     "@types/node": "^22.0.0",
     "vitest": "^3.2.4"
   }

@@ -9,6 +9,10 @@
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
+    },
+    "./node-only": {
+      "import": "./dist/node-only.js",
+      "types": "./dist/node-only.d.ts"
     }
   },
   "scripts": {
@@ -17,9 +21,12 @@
     "test": "vitest run"
   },
   "devDependencies": {
-    "@modeler/parser": "workspace:*",
     "@types/node": "^22.0.0",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"
+  },
+  "dependencies": {
+    "@modeler/parser": "workspace:*",
+    "smol-toml": "^1.6.1"
   }
 }
