@@ -1,5 +1,4 @@
 import {
-  createConnection,
   InitializeParams,
   InitializeResult,
   TextDocuments,
@@ -8,6 +7,7 @@ import {
   TextDocumentChangeEvent,
   Connection,
 } from 'vscode-languageserver';
+import { createConnection, ProposedFeatures } from 'vscode-languageserver/lib/node/main.js';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { parseString } from '@modeler/parser';
 import type { ParseError } from '@modeler/parser';
@@ -93,12 +93,7 @@ export function createServerConnection(connection: Connection): void {
 }
 
 export function runServer(): void {
-  /* eslint-disable @typescript-eslint/no-explicit-any */
-  const connection = createConnection(
-    process.stdin as any,
-    process.stdout as any
-  ) as Connection;
-  /* eslint-enable @typescript-eslint/no-explicit-any */
+  const connection = createConnection(ProposedFeatures.all, process.stdin, process.stdout);
   createServerConnection(connection);
   connection.listen();
 }
