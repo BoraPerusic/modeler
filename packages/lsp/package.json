@@ -1,0 +1,41 @@
+{
+  "name": "@modeler/lsp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/server-stdio.js",
+  "types": "./dist/server-stdio.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/server-stdio.js",
+      "types": "./dist/server-stdio.d.ts"
+    },
+    "./browser": {
+      "import": "./dist/server-browser.js",
+      "types": "./dist/server-browser.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc && pnpm run bundle-stdio && pnpm run bundle-browser",
+    "bundle-stdio": "esbuild src/server-stdio.ts --bundle --platform=node --format=esm --target=es2022 --outfile=dist/server-stdio.js --external:vscode-languageserver --external:vscode-languageserver-protocol --external:vscode-jsonrpc --external:antlr4ng",
+    "bundle-browser": "esbuild src/server-browser.ts --bundle --platform=browser --format=esm --target=es2022 --outfile=dist/server-browser.js --external:vscode-languageserver --external:vscode-languageserver-protocol --external:vscode-jsonrpc --external:antlr4ng --external:@modeler/parser",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@modeler/edit": "workspace:*",
+    "@modeler/parser": "workspace:*",
+    "@modeler/semantics": "workspace:*",
+    "antlr4ng": "^3.0.0",
+    "vscode-jsonrpc": "^8.2.0",
+    "vscode-languageserver": "^9.0.1",
+    "vscode-languageserver-protocol": "^3.17.5",
+    "vscode-languageserver-textdocument": "^1.0.12"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "esbuild": "^0.27.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  }
+}
