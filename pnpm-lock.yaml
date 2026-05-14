@@ -184,10 +184,13 @@ importers:
         version: 5.9.3
 
   tests/integration:
-    dependencies:
-      antlr4ng:
-        specifier: ^3.0.16
-        version: 3.0.16
+    devDependencies:
+      '@modeler/parser':
+        specifier: workspace:*
+        version: link:../../packages/parser
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.19
       vitest:
         specifier: ^3.2.4
         version: 3.2.4(@types/node@22.19.19)(jiti@1.21.7)

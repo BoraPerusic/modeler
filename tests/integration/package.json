@@ -4,10 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "echo 'Tests will be added in Section I'"
+    "test": "vitest run"
   },
-  "dependencies": {
-    "antlr4ng": "^3.0.16",
+  "devDependencies": {
+    "@modeler/parser": "workspace:*",
+    "@types/node": "^22.0.0",
     "vitest": "^3.2.4"
   }
 }
