@@ -10,14 +10,11 @@ import {
   InitializeParams,
 } from 'vscode-languageserver-protocol';
 
-export interface ModelGraph {
-  nodes: Array<{ qname: string; kind: string; label: string }>;
-  edges: unknown[];
-}
+import type { ModelGraph } from '@modeler/lsp';
 
 export interface LspClient {
   openDocument(uri: string, content: string): Promise<void>;
-  getModelGraph(uri: string): Promise<ModelGraph>;
+  getModelGraph(uri: string, schema: 'db' | 'er'): Promise<ModelGraph>;
   onDiagnostics(handler: (uri: string, messages: string[]) => void): void;
   dispose(): void;
 }
@@ -47,9 +44,10 @@ export async function createLspClient(): Promise<LspClient> {
         textDocument: { uri, languageId: 'ttr', version: 1, text: content },
       });
     },
-    async getModelGraph(uri) {
+    async getModelGraph(uri, schema) {
       return connection.sendRequest('modeler/getModelGraph', {
         textDocument: { uri },
+        schema,
       }) as Promise<ModelGraph>;
     },
     onDiagnostics(handler) {

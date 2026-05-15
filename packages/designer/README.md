@@ -1,6 +1,6 @@
 # @modeler/designer
 
-Graphical designer for TTR (Tatrman) models. Forked from Ontology Playground with Quests and gamification removed.
+Graphical designer for TTR (Tatrman) models. Forked from the Ontology Playground project; only the read-only schema-rendering surface is retained.
 
 ## Status (Phase 0)
 

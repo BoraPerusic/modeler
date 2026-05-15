@@ -1,6 +1,6 @@
 # Phase 3 — Contracts
 
-**Status:** v0 draft, 2026-05-15. Companion to `tasks-phase-03-designer.md` and the per-section mini-task-lists under `docs/plan/phase-03/`.
+**Status:** v1, 2026-05-15. Companion to `tasks-phase-03-designer.md` and the per-section mini-task-lists under `docs/plan/phase-03/`.
 
 **Audience:** the implementer (junior dev or coding agent) executing Phase 3. The contracts here are non-negotiable — every type, every method signature, every JSON shape below is the single source of truth. If a mini-task-list shows a snippet that conflicts with this document, **this document wins**. Open a PR against this file to amend.
 
@@ -604,3 +604,4 @@ The contracts are versioned by document, not per-type. We do not need finer gran
 ### Changelog
 
 - **v0 (2026-05-15)** — initial draft for Phase 3 kickoff.
+- **v1 (2026-05-15)** — Section A review (review-005): selected path (a) — kept early LSP work from Section B. Added `parseCardinality`, `extractCardinality`, `renderDataType`, `validateLayout`, `emptyLayout`, `LayoutFile`, `ViewportState`, `SymbolDetail`, `PerKindData`, `ModelGraph`, `ModelGraphNode`, `ModelGraphRow`, `ModelGraphEdge`, `DataType`, `DataTypeSimple`, `DataTypeStructured`, `Cardinality`, `RenderableSchemaCode`, `DisplayMode` to `@modeler/lsp` exports; all covered by unit tests. Deleted `lsp-index.ts`, collapsed re-exports to `index.ts` only.

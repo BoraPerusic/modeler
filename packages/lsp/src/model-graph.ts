@@ -1,5 +1,5 @@
 import Ajv2020Module from 'ajv/dist/2020.js';
-import type { Definition } from '@modeler/parser';
+import type { Definition, ObjectValue } from '@modeler/parser';
 
 export type RenderableSchemaCode = 'db' | 'er';
 export type DisplayMode = 'just-names' | 'with-types' | 'with-constraints';
@@ -71,6 +71,16 @@ export function parseCardinality(s: string): Cardinality | null {
     case '1..*': return 'one-or-many';
     default: return null;
   }
+}
+
+export function extractCardinality(obj: ObjectValue | undefined): { from: Cardinality | null; to: Cardinality | null } {
+  if (!obj) return { from: null, to: null };
+  const lookup = (key: string): Cardinality | null => {
+    const entry = obj.entries.find((e) => e.key === key);
+    if (!entry || entry.value.kind !== 'string') return null;
+    return parseCardinality(entry.value.value);
+  };
+  return { from: lookup('from'), to: lookup('to') };
 }
 
 // Layout sidecar types

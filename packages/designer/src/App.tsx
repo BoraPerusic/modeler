@@ -1,33 +1,28 @@
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useReducer } from 'react';
 import { Header } from './components/Header';
 import { Canvas } from './components/Canvas';
 import { InspectorPanel } from './components/InspectorPanel';
+import { NlPane } from './components/NlPane';
 import { createLspClient } from './lsp-client';
-
-interface ModelNode {
-  qname: string;
-  kind: string;
-  label: string;
-}
-
-type ModelEdge = Record<string, never>;
+import type { LspClient } from './lsp-client';
+import { designerReducer } from './state/designer-reducer';
+import { initialDesignerState } from './state/designer-state';
 
 function App() {
-  const [nodes, setNodes] = useState<ModelNode[]>([]);
-  const [edges, setEdges] = useState<ModelEdge[]>([]);
-  const [selectedNode, setSelectedNode] = useState<ModelNode | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const clientRef = useRef<Awaited<ReturnType<typeof createLspClient>> | null>(null);
+  const [state, dispatch] = useReducer(designerReducer, initialDesignerState);
+  const [nlPaneOpen, setNlPaneOpen] = useState(false);
+  const clientRef = useRef<LspClient | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    createLspClient().then((client) => {
+    createLspClient().then((client: LspClient) => {
       if (cancelled) {
         client.dispose();
         return;
       }
       client.onDiagnostics((_uri, messages) => {
-        setError(messages.length === 0 ? null : messages.join(', '));
+        dispatch({ type: 'setError', message: messages.length === 0 ? null : messages.join(', ') });
       });
       clientRef.current = client;
     });
@@ -38,34 +33,57 @@ function App() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!state.projectUri || !clientRef.current) return;
+    const client = clientRef.current;
+    client.getModelGraph(state.projectUri, state.activeSchema).then((graph) => {
+      void graph;
+    });
+  }, [state.projectUri, state.activeSchema]);
+
   const handleFileLoad = async (content: string, uri: string) => {
     const client = clientRef.current;
     if (!client) return;
     const fileUri = `file:///${uri}`;
     await client.openDocument(fileUri, content);
-    const graph = await client.getModelGraph(fileUri);
-    setNodes(graph.nodes);
-    setEdges(graph.edges as never[]);
+    dispatch({ type: 'loadProject', projectUri: fileUri });
   };
 
-  const handleNodeSelect = (node: ModelNode) => {
-    setSelectedNode(node);
+  const handleNodeSelect = (qname: string) => {
+    dispatch({ type: 'selectSymbol', qname });
   };
 
   return (
     <div className="flex flex-col h-screen bg-gray-50">
-      <Header onFileLoad={handleFileLoad} />
-      {error && (
+      <Header
+        activeSchema={state.activeSchema}
+        displayMode={state.viewports[state.activeSchema].displayMode}
+        projectUri={state.projectUri}
+        onFileLoad={handleFileLoad}
+        onSchemaChange={(schema) => dispatch({ type: 'switchSchema', schema })}
+        onDisplayModeChange={(mode) => dispatch({ type: 'setDisplayMode', schema: state.activeSchema, mode })}
+        onToggleNlPane={() => setNlPaneOpen((v) => !v)}
+      />
+      {state.error && (
         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-2">
-          {error}
+          {state.error}
         </div>
       )}
       <div className="flex flex-1 overflow-hidden">
         <div className="flex-1 relative">
-          <Canvas nodes={nodes} edges={edges} onNodeSelect={handleNodeSelect} />
+          <Canvas
+            projectUri={state.projectUri}
+            activeSchema={state.activeSchema}
+            displayMode={state.viewports[state.activeSchema].displayMode}
+            onNodeSelect={handleNodeSelect}
+          />
         </div>
-        <InspectorPanel selectedNode={selectedNode} />
+        <InspectorPanel
+          selectedSymbol={state.selectedSymbol}
+          symbolDetails={state.symbolDetails}
+        />
       </div>
+      <NlPane open={nlPaneOpen} onToggle={() => setNlPaneOpen((v) => !v)} />
     </div>
   );
 }

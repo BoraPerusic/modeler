@@ -17,10 +17,10 @@
 ## Section A — Designer scaffold cleanup
 - [x] A.1 Audit and remove Ontology-Playground vestiges (quest/gamif/school)
 - [x] A.2 Create reducer skeleton (`designer-state.ts`, `designer-reducer.ts`) + tests
-- [ ] A.3 Refactor `App.tsx` onto the reducer
-- [ ] A.4 Extend `Header.tsx` with schema/display-mode toggles, read-only badge, NL pane toggle
-- [ ] A.5 Add `NlPane.tsx` (collapsible bottom panel)
-- [ ] A.6 Re-style for Phase-3 look
+- [x] A.3 Refactor `App.tsx` onto the reducer
+- [x] A.4 Extend `Header.tsx` with schema/display-mode toggles, read-only badge, NL pane toggle
+- [x] A.5 Add `NlPane.tsx` (collapsible bottom panel)
+- [x] A.6 Re-style for Phase-3 look (text-sky-500 active, border-slate-300 bar)
 
 ## Section B — LSP integration
 - [ ] B.1 `modeler/getModelGraph` rewrite (`model-graph.ts`)

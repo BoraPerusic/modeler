@@ -2,12 +2,13 @@ import { useEffect, useRef } from 'react';
 import cytoscape from 'cytoscape';
 
 interface CanvasProps {
-  nodes: Array<{ qname: string; kind: string; label: string }>;
-  edges: Array<unknown>;
-  onNodeSelect: (node: { qname: string; kind: string; label: string }) => void;
+  projectUri: string | null;
+  activeSchema: 'db' | 'er';
+  displayMode: 'just-names' | 'with-types' | 'with-constraints';
+  onNodeSelect: (qname: string) => void;
 }
 
-export function Canvas({ nodes, edges: _edges, onNodeSelect }: CanvasProps) {
+export function Canvas({ projectUri: _projectUri, activeSchema: _activeSchema, displayMode: _displayMode, onNodeSelect }: CanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const cyRef = useRef<cytoscape.Core | null>(null);
 
@@ -47,8 +48,8 @@ export function Canvas({ nodes, edges: _edges, onNodeSelect }: CanvasProps) {
     });
 
     cyRef.current.on('tap', 'node', (evt) => {
-      const node = evt.target.data();
-      onNodeSelect(node);
+      const data = evt.target.data();
+      onNodeSelect(data.qname);
     });
 
     return () => {
@@ -56,23 +57,7 @@ export function Canvas({ nodes, edges: _edges, onNodeSelect }: CanvasProps) {
         cyRef.current.destroy();
       }
     };
-  }, []);
-
-  useEffect(() => {
-    if (!cyRef.current) return;
-
-    cyRef.current.elements().remove();
-
-    const cyNodes = nodes.map((node, index) => ({
-      data: { id: `node-${index}`, label: node.label, kind: node.kind, qname: node.qname },
-    }));
-
-    cyRef.current.add(cyNodes);
-
-    if (nodes.length > 0) {
-      cyRef.current.layout({ name: 'circle', padding: 50 }).run();
-    }
-  }, [nodes]);
+  }, [onNodeSelect]);
 
   return (
     <div

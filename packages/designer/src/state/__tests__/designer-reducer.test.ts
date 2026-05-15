@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { designerReducer, initialDesignerState } from '../designer-state';
-import type { DesignerAction } from '../designer-state';
+import { designerReducer } from '../designer-reducer';
+import { initialDesignerState } from '../designer-state';
+import type { DesignerState } from '../designer-state';
+import type { DesignerAction } from '../designer-reducer';
+import type { SymbolDetail } from '@modeler/lsp';
 
 describe('designerReducer', () => {
   it("'switchSchema' updates activeSchema", () => {
@@ -67,11 +70,9 @@ describe('designerReducer', () => {
   });
 
   it("'loadProject' resets symbolDetails cache", () => {
-    const stateWithDetails = {
+    const stateWithDetails: DesignerState = {
       ...initialDesignerState,
-      symbolDetails: {
-        'er.entity.artikl': { qname: 'er.entity.artikl', name: 'artikl', label: 'Artikl', kind: 'entity' as const, description: null, tags: [] as string[], sourceUri: 'file:///test.ttr', sourceLine: 1, perKindData: { kind: 'entity' as const, attributes: [], nameAttributeQname: null, codeAttributeQname: null, roleQnames: [] }, referencedBy: [] },
-      },
+      symbolDetails: { 'er.entity.artikl': {} as SymbolDetail },
     };
     const action: DesignerAction = { type: 'loadProject', projectUri: 'file:///x' };
     const state = designerReducer(stateWithDetails, action);
