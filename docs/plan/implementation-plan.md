@@ -86,6 +86,8 @@ Detailed task breakdown in `tasks-phase-00-thin-slice.md`. After Phase 0, the de
 
 ## Phase 3 — Designer v1 (3–4 weeks)
 
+**Detailed task list:** [`tasks-phase-03-designer.md`](tasks-phase-03-designer.md).
+
 **Goal**: minimal Designer per D7 — read-only render of `db` and `er`, single display variant, schema/detail toggles, layout persistence.
 
 **Sub-phases**:
