@@ -15,8 +15,8 @@
 - [ ] Verify context7 MCP responds
 
 ## Section A — Designer scaffold cleanup
-- [ ] A.1 Audit and remove Ontology-Playground vestiges (quest/gamif/school)
-- [ ] A.2 Create reducer skeleton (`designer-state.ts`, `designer-reducer.ts`) + tests
+- [x] A.1 Audit and remove Ontology-Playground vestiges (quest/gamif/school)
+- [x] A.2 Create reducer skeleton (`designer-state.ts`, `designer-reducer.ts`) + tests
 - [ ] A.3 Refactor `App.tsx` onto the reducer
 - [ ] A.4 Extend `Header.tsx` with schema/display-mode toggles, read-only badge, NL pane toggle
 - [ ] A.5 Add `NlPane.tsx` (collapsible bottom panel)
