@@ -1,90 +1,128 @@
 # Phase 3 — Progress
 
-**Started:** _(set when work begins)_
+**Started:** 2026-05-15
 **Branch:** `feat/phase-03-designer`
-**Status:** _(not started)_
-
-This is a **summary** progress file. Granular task-level progress is tracked inside each mini-task-list file under `docs/plan/phase-03/` — every checkbox there is the single source of truth for that section. This file only reflects which mini-task-lists are open, in flight, or done.
-
-When you start a mini-task-list, set its status here to **In flight**; when every checkbox in the file is ticked AND its `Verify by running` block exits 0 on a fresh tree, set its status to **Done** and add a one-line summary of what was decided differently than the plan (if anything).
+**Status:** In progress
 
 ## Pre-flight
-- [ ] Phase 2 acceptance criteria green on a fresh clone (build, test, lint, typecheck)
-- [ ] Branch `feat/phase-03-designer` created
-- [ ] Required reading completed: contracts → architecture → implementation plan → progress-phase-02 deferrals
-- [ ] Phase-0 Designer scaffold walked
-- [ ] `context7` MCP responds (smoke `mcp__context7__resolve-library-id` call returned a valid id)
-- [ ] This progress file mirrors the mini-task-list structure (this list)
+- [x] Confirm Phase 2 acceptance criteria (build, test, lint, typecheck all green)
+- [x] Branch `feat/phase-03-designer` from merged Phase 2 PR
+- [x] Read `docs/design/phase-03-contracts.md`
+- [x] Read architecture docs (§4.7, §6, §4.5, §8.2)
+- [x] Read `docs/plan/implementation-plan.md`
+- [x] Re-read `docs/plan/progress-phase-02.md` "Deferred to later phases"
+- [x] Walked Designer scaffold (`App.tsx`, `lsp-client.ts`, `Canvas.tsx`, `Header.tsx`, `InspectorPanel.tsx`)
+- [ ] Verify context7 MCP responds
 
-## Designer body (sequential)
+## Section A — Designer scaffold cleanup
+- [ ] A.1 Audit and remove Ontology-Playground vestiges (quest/gamif/school)
+- [ ] A.2 Create reducer skeleton (`designer-state.ts`, `designer-reducer.ts`) + tests
+- [ ] A.3 Refactor `App.tsx` onto the reducer
+- [ ] A.4 Extend `Header.tsx` with schema/display-mode toggles, read-only badge, NL pane toggle
+- [ ] A.5 Add `NlPane.tsx` (collapsible bottom panel)
+- [ ] A.6 Re-style for Phase-3 look
 
-| Section | File | Status | Notes |
-|---|---|---|---|
-| A | [A-designer-scaffold.md](phase-03/A-designer-scaffold.md) | Not started | — |
-| B | [B-lsp-integration.md](phase-03/B-lsp-integration.md) | Not started | — |
-| C | [C-db-rendering.md](phase-03/C-db-rendering.md) | Not started | — |
-| D | [D-er-rendering.md](phase-03/D-er-rendering.md) | Not started | — |
-| E | [E-inspector.md](phase-03/E-inspector.md) | Not started | — |
-| F | [F-layout-persistence.md](phase-03/F-layout-persistence.md) | Not started | — |
-| G | [G-static-deploy.md](phase-03/G-static-deploy.md) | Not started | — |
+## Section B — LSP integration
+- [ ] B.1 `modeler/getModelGraph` rewrite (`model-graph.ts`)
+- [ ] B.2 Layout types + validator + handlers (`layout.ts`, `layout.schema.json`)
+- [ ] B.3 `modeler/applyGraphEdit` placeholder
+- [ ] B.4 `modeler/getSymbolDetail` handler
+- [ ] B.5 Designer-side `LspClient` expansion
+- [ ] B.6 File-system shim
+- [ ] B.7 Wire file-system shim into `App.tsx`
 
-## Phase-2 carryovers (parallel-safe with A; can begin immediately)
+## Section C — db schema rendering
+- [ ] C.1 Add Cytoscape extensions
+- [ ] C.2 Write `cy/adapter.ts` (`modelGraphToCyElements`)
+- [ ] C.3 Refactor `Canvas.tsx` to consume `ModelGraph`
+- [ ] C.4 Layout-once-on-load semantics
+- [ ] C.5 Wire schema toggle
+- [ ] C.6 Wire display-mode toggle
 
-| Section | File | Status | Notes |
-|---|---|---|---|
-| H | [H-symbol-indexing.md](phase-03/H-symbol-indexing.md) | Not started | — |
-| I | [I-parse-recovery.md](phase-03/I-parse-recovery.md) | Not started | — |
-| J | [J-vscode-smoke.md](phase-03/J-vscode-smoke.md) | Not started | — |
+## Section D — er schema rendering
+- [ ] D.1 `cy/glyph-renderer.ts`
+- [ ] D.2 Cardinality mapping in the LSP
+- [ ] D.3 Extend adapter for er
+- [ ] D.4 Canvas overlay for glyphs
+- [ ] D.5 Visual review
 
-## Documentation
+## Section E — Inspector panel
+- [ ] E.1 `buildSymbolDetail` in LSP
+- [ ] E.2 Register `modeler/getSymbolDetail`
+- [ ] E.3 Extend reducer + client
+- [ ] E.4 Rewrite `InspectorPanel.tsx`
+- [ ] E.5 Wire selection from Canvas
 
-| Section | File | Status | Notes |
-|---|---|---|---|
-| K | [K-documentation.md](phase-03/K-documentation.md) | Not started | — |
+## Section F — Layout persistence
+- [ ] F.1 `debounce` utility
+- [ ] F.2 Save flow (dragfreeon, viewport, layoutstop)
+- [ ] F.3 Load flow
+- [ ] F.4 Layout-vs-positions race resolution
+- [ ] F.5 "Download layout" affordance
+- [ ] F.6 Stale-qname tolerance
+
+## Section G — Static deploy
+- [ ] G.1 Sample copy script
+- [ ] G.2 Vite config base path
+- [ ] G.3 Demo-mode landing
+- [ ] G.4 Landing-page card
+- [ ] G.5 GitHub Pages workflow
+- [ ] G.6 Smoke-curl post-deploy
+- [ ] G.7 README and one-time setup
+
+## Section H — Symbol indexing (carryover)
+- [ ] H.1 Identify existing per-kind emitters
+- [ ] H.2 Add emitters for 7 new kinds
+- [ ] H.3 Verify resolver/ReferenceIndex pick them up
+- [ ] H.4 Integration assertions
+- [ ] H.5 Update Phase 2 progress doc
+
+## Section I — Parse recovery info (carryover)
+- [ ] I.1 Write `recovery.ts` (`RecoveryReportingStrategy`)
+- [ ] I.2 Wire into `parseString`
+- [ ] I.3 Update recovery-fixtures test
+- [ ] I.4 Update Phase 2 progress doc
+- [ ] I.5 Update `diagnostics.md`
+
+## Section J — VS Code smoke test (carryover)
+- [ ] J.1 devDependencies
+- [ ] J.2 Test harness scaffold
+- [ ] J.3 Smoke test (TC1-TC5)
+- [ ] J.4 `test:smoke` script
+- [ ] J.5 CI job
+- [ ] J.6 Update Phase 2 progress doc
+
+## Section K — Documentation
+- [ ] K.1 `packages/semantics/README.md`
+- [ ] K.2 `packages/lsp/README.md`
+- [ ] K.3 `packages/designer/README.md`
+- [ ] K.4 Top-level `README.md` update
+- [ ] K.5 Architecture §10 close-out
+- [ ] K.6 `diagnostics.md` final pass
 
 ## Final verification
-
-- [ ] All eleven mini-task-lists show Status: Done
-- [ ] `pnpm -r build && test && lint && typecheck` green on a fresh clone
+- [ ] All eleven mini-task-lists have every box ticked
+- [ ] `pnpm -r build && test && lint && typecheck` green
 - [ ] `pnpm --filter @modeler/integration-tests test` green
 - [ ] `pnpm --filter @modeler/vscode-ext test:smoke` green
-- [ ] `pnpm --filter @modeler/designer build` produces a working static bundle that includes the worker
-- [ ] GitHub Pages deploy URL renders `samples/v1-metadata/` in demo mode
-- [ ] Hand-verified demo path complete (see `tasks-phase-03-designer.md` → "Hand-verified demo path")
-- [ ] No regressions in Phase 1 / Phase 2 surfaces
+- [ ] `pnpm --filter @modeler/designer build` produces working static bundle
+- [ ] GitHub Pages deploy workflow ran at least once
+- [ ] Hand-verified demo path (open ?demo=v1-metadata)
+- [ ] No regressions in Phase 1/2 features
 
-## Test results
-
-Captured after the final verification step lands. Format mirrors Phase 2's "Test results" section: per-package test count, build/lint/typecheck status.
-
+## Test Results
 ```
-pnpm -r build:      _
-pnpm -r test:       _
-  packages/parser:        _ tests
-  packages/semantics:     _ tests
-  packages/lsp:           _ tests
-  packages/designer:      _ tests
-  packages/vscode-ext:    _ tests (+ smoke: _)
-  tests/integration:      _ tests
-pnpm -r lint:       _
-pnpm -r typecheck:  _
+pnpm -r build:  ✅
+pnpm -r test:   ✅
+pnpm -r lint:   ✅
+pnpm -r typecheck: ✅
 ```
 
-## Key decisions
-
-_(Append decisions made during Phase 3 work that aren't already captured in the plan or contracts. Examples we expect to see: which Cytoscape glyph-overlay approach was chosen, exact cose-bilkent seed value, debounce intervals tuning, file-system shim filtering edge cases.)_
-
-## Contract amendments
-
-_(Append one line per amendment to `docs/design/phase-03-contracts.md`, with a date and a pointer to the PR. Per the amendments policy in the contracts doc.)_
-
-## Deferred to later phases
-
+## Deferred from Phase 2
 | Item | Target |
 |------|--------|
-| Embeddable `<script>` distribution to npm | v1.x |
-| VS Code webview embed of the Designer | v1.x |
-| Designer edit mode + `WorkspaceEdit` synthesizer | v1.1 |
-| `cnc` schema render + Chen / UML display variants | v1.4 |
-| Natural-language pane wired to an LLM | v1.4 |
-| macOS / Windows `vscode-ext` smoke runners | Phase 5 (hardening) |
+| `parse-recovery-info` emission | Phase 3.I |
+| VS Code `@vscode/test-electron` smoke test | Phase 3.J |
+| `packages/semantics/README.md` | Phase 3.K |
+| `packages/lsp/README.md` v2 surface doc | Phase 3.K |
+| Indexing relations/queries/roles/er2db_* | Phase 3.H |

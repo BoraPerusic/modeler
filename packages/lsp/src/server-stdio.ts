@@ -1,6 +1,37 @@
 import { createServerConnection } from './server.js';
 import { createConnection, ProposedFeatures } from 'vscode-languageserver/lib/node/main.js';
 import { findProjectRoot, loadProject, loadStockVocabularies } from '@modeler/semantics/node-only';
+import type {
+  RenderableSchemaCode,
+  DisplayMode,
+  SchemaCode,
+  Cardinality,
+  ModelGraphNode,
+  ModelGraphRow,
+  ModelGraphEdge,
+  ModelGraph,
+  ViewportState,
+  LayoutFile,
+  PerKindData,
+  SymbolDetail,
+} from './model-graph.js';
+import { renderDataType, parseCardinality, emptyLayout, validateLayout } from './model-graph.js';
+
+export type {
+  RenderableSchemaCode,
+  DisplayMode,
+  SchemaCode,
+  Cardinality,
+  ModelGraphNode,
+  ModelGraphRow,
+  ModelGraphEdge,
+  ModelGraph,
+  ViewportState,
+  LayoutFile,
+  PerKindData,
+  SymbolDetail,
+};
+export { renderDataType, parseCardinality, emptyLayout, validateLayout };
 
 const connection = createConnection(ProposedFeatures.all, process.stdin, process.stdout);
 
