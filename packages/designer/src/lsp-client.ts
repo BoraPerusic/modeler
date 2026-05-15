@@ -10,11 +10,11 @@ import {
   InitializeParams,
 } from 'vscode-languageserver-protocol';
 
-import type { ModelGraph } from '@modeler/lsp';
+import type { ModelGraph, RenderableSchemaCode } from '@modeler/lsp';
 
 export interface LspClient {
   openDocument(uri: string, content: string): Promise<void>;
-  getModelGraph(uri: string, schema: 'db' | 'er'): Promise<ModelGraph>;
+  getModelGraph(uri: string, schema: RenderableSchemaCode): Promise<ModelGraph>;
   onDiagnostics(handler: (uri: string, messages: string[]) => void): void;
   dispose(): void;
 }

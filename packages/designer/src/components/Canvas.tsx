@@ -1,10 +1,11 @@
 import { useEffect, useRef } from 'react';
 import cytoscape from 'cytoscape';
+import type { RenderableSchemaCode, DisplayMode } from '@modeler/lsp';
 
 interface CanvasProps {
   projectUri: string | null;
-  activeSchema: 'db' | 'er';
-  displayMode: 'just-names' | 'with-types' | 'with-constraints';
+  activeSchema: RenderableSchemaCode;
+  displayMode: DisplayMode;
   onNodeSelect: (qname: string) => void;
 }
 

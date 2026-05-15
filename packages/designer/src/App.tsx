@@ -11,6 +11,9 @@ import { initialDesignerState } from './state/designer-state';
 
 function App() {
   const [state, dispatch] = useReducer(designerReducer, initialDesignerState);
+  // NL-pane open/close is UI-only and not project-scoped, so it lives in local
+  // useState rather than DesignerState. If the pane gains state that must persist
+  // across project loads, move it into the reducer.
   const [nlPaneOpen, setNlPaneOpen] = useState(false);
   const clientRef = useRef<LspClient | null>(null);
 
@@ -33,13 +36,8 @@ function App() {
     };
   }, []);
 
-  useEffect(() => {
-    if (!state.projectUri || !clientRef.current) return;
-    const client = clientRef.current;
-    client.getModelGraph(state.projectUri, state.activeSchema).then((graph) => {
-      void graph;
-    });
-  }, [state.projectUri, state.activeSchema]);
+  // Graph fetching lives in §B (see docs/plan/phase-03/B-lsp-integration.md):
+  // a useEffect on (projectUri, activeSchema) will dispatch a 'setGraph' action.
 
   const handleFileLoad = async (content: string, uri: string) => {
     const client = clientRef.current;

@@ -1,12 +1,16 @@
+// Phase-3 visual treatment: accent = text-sky-500 (active toggle), border-slate-300 (bar).
+// Owned here so §D and §E don't drift — see docs/plan/phase-03/A-designer-scaffold.md A.6.
+
 import { useRef } from 'react';
+import type { RenderableSchemaCode, DisplayMode } from '@modeler/lsp';
 
 interface HeaderProps {
-  activeSchema: 'db' | 'er';
-  displayMode: 'just-names' | 'with-types' | 'with-constraints';
+  activeSchema: RenderableSchemaCode;
+  displayMode: DisplayMode;
   projectUri: string | null;
   onFileLoad: (content: string, uri: string) => void;
-  onSchemaChange: (schema: 'db' | 'er') => void;
-  onDisplayModeChange: (mode: 'just-names' | 'with-types' | 'with-constraints') => void;
+  onSchemaChange: (schema: RenderableSchemaCode) => void;
+  onDisplayModeChange: (mode: DisplayMode) => void;
   onToggleNlPane: () => void;
 }
 
