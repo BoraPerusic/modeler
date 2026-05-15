@@ -103,10 +103,10 @@ Phase 0 emits parser diagnostics with no `code` and no `source`. Phase 1 establi
 
 - [ ] **`@modeler/parser` exports `DiagnosticCode` enum** in `packages/parser/src/diagnostics.ts`:
   - `ParseError = 'ttr/parse-error'`
-  - `UnknownProperty = 'ttr/unknown-property'`
-  - `ParseRecoveryInfo = 'ttr/parse-recovery-info'`
+  - `UnknownProperty = 'ttr/unknown-property'` (reserved for Phase 2 semantics layer — not emitted in Phase 1)
+  - `ParseRecoveryInfo = 'ttr/parse-recovery-info'` (deferred; requires DefaultErrorStrategy subclass in Phase 2)
   - (Phase 2 will add: `UnresolvedReference = 'ttr/unresolved-reference'`, `DuplicateDefinition = 'ttr/duplicate-definition'`, `RequiredPropertyMissing = 'ttr/required-property-missing'`, etc.)
-- [ ] **Each `ParseError` produced by `walker.ts` carries `code` and a structured `category`.** ANTLR syntax errors → `ParseError`; `unknown property` errors (the parser already rejects unknown property names — confirm and surface them as a distinct error) → `UnknownProperty`; the new `ParseRecoveryInfo` is emitted by §F's recovery work.
+- [ ] **Each `ParseError` produced by `walker.ts` carries `code` and a structured `category`.** ANTLR syntax errors → `ParseError`; `UnknownProperty` and `ParseRecoveryInfo` are reserved for Phase 2.
 - [ ] **`@modeler/lsp` propagates `code` and `source: 'modeler'`** on every `Diagnostic` it publishes. The mapping:
 
   | Parser code | LSP severity |
@@ -122,7 +122,7 @@ Phase 0 emits parser diagnostics with no `code` and no `source`. Phase 1 establi
 
 ## Section F — Parser error recovery
 
-`ttr/parse-recovery-info` is meaningful only if the parser actually recovers from errors and continues producing AST nodes. ANTLR4 has built-in recovery (token resync) but its defaults are conservative — for the IDE to be useful on broken input, recovery needs tuning so most common-typo cases still yield a usable partial AST.
+**Status:** Deferred — `ttr/parse-recovery-info` emission requires `DefaultErrorStrategy` subclass in Phase 2. ANTLR's built-in recovery already produces partial ASTs (verified by recovery fixtures). The `ParseRecoveryInfo` code is reserved and documented but not yet emitted.
 
 - [ ] **Survey current behavior.** Write a fixtures file `packages/parser/src/__tests__/recovery-fixtures.ts` with 10 common-typo broken inputs (missing closing `}`, missing `:` between property and value, trailing comma in wrong place, unterminated string, missing `def` keyword, unknown property name, duplicate property within a def, malformed dotted id, missing comma between properties, invalid type literal). For each, document what the AST looks like today (often: empty `definitions`).
 - [ ] **Add error-recovery hooks.** In `packages/parser/src/walker.ts`, hook the ANTLR parser's error-recovery strategy: emit a `ParseRecoveryInfo` diagnostic at the recovery point with a message describing what was assumed; continue producing AST. Use `DefaultErrorStrategy` extended subtype if needed.
@@ -133,18 +133,12 @@ Phase 0 emits parser diagnostics with no `code` and no `source`. Phase 1 establi
 **Acceptance**: 10/10 recovery fixtures produce useful partial trees; parsing performance regression <2x on the worst case.
 
 ## Section G — Semantic tokens via LSP
-
-TextMate grammar handles ~95% of highlighting; the remainder is best done with semantic awareness. Two cases worth solving in Phase 1: (a) dotted ids where one part is a schema-code keyword (`er.entity.foo` — `er` is both a keyword and a position in a qname), (b) the *defined name* in a `def <kind> <name>` — TextMate flags it as `entity.name.tag` but only if it's an `IDENT`; the grammar permits Czech characters and even some keyword fragments.
-
-- [ ] **Implement `textDocument/semanticTokens/full` in `@modeler/lsp`.** Define the legend:
-  - `tokenTypes`: `["namespace", "type", "class", "property", "string", "number", "comment", "keyword", "variable"]`
-  - `tokenModifiers`: `["declaration", "readonly", "deprecated"]`
-- [ ] **Token producer.** Walk the AST after parse; for each `Definition.name`, emit a `class` token with `declaration` modifier; for every dotted reference (the parser exposes these via `PropertyValue.IdValue` chains), emit `namespace` for each part except the last, `variable` for the last.
-- [ ] **VS Code extension.** Already speaks LSP — semantic tokens come for free once the server provides them.
-- [ ] **Tests.** Unit tests in `@modeler/lsp` asserting that for known fixtures the produced tokens have the expected types and ranges.
-- [ ] **Manual verification.** Open `samples/v1-metadata/er.ttr` in EDH; confirm dotted refs and definition names colorize via semantic tokens (they may use a different palette than TextMate-only tokens, depending on theme).
-
-**Acceptance**: `vscode.commands.executeCommand('vscode.provideDocumentSemanticTokens', uri)` returns a non-empty `SemanticTokens` for any sample file; visual diff against Phase 0 highlighting shows the dotted-id and def-name cases improved.
+- [ ] Deferred to Phase 1.1 — see review-003 §1G. Move to Phase 1.1 or Phase 2.A.
+  - [ ] `textDocument/semanticTokens/full` handler in LSP server
+  - [ ] Legend: 9 token types, 3 modifiers
+  - [ ] Token producer walks AST definitions
+  - [ ] Unit test for semantic tokens
+  **Status:** Deferred — see review-003 §1G. Move to Phase 1.1 or Phase 2.A.
 
 ## Section H — File icons
 
@@ -172,18 +166,8 @@ Phase 0 shipped the local `sync-to-ai-platform.sh` and `check-sync.sh` scripts b
 
 ## Section J — VS Code smoke test
 
-Carryover from Phase 0 (Section G of the original task list, deferred per review §2.3). Now that Phase 1's Foundation tier is concrete enough to assert against, we can write a real smoke test.
-
-- [ ] **Add `@vscode/test-electron` smoke test in `packages/vscode-ext/src/__tests__/extension.smoke.test.ts`** that:
-  - Boots a VS Code instance via `runTests`
-  - Opens `samples/v1-metadata/er.ttr`
-  - Asserts the document's `languageId === 'ttr'`
-  - Modifies the document to introduce a syntax error; waits for diagnostics; asserts at least one with code `ttr/parse-error`
-  - Closes the document; asserts diagnostics clear
-- [ ] **Wire into root CI.** Add a smoke-test job that installs xvfb (Linux) / uses macOS runner; runs `pnpm --filter @modeler/vscode-ext test:smoke`. Skip on Windows for v1.
-- [ ] **Local convenience.** `pnpm --filter @modeler/vscode-ext test:smoke` runs without prereqs on macOS / Linux desktop.
-
-**Acceptance**: smoke test passes in CI; on a fresh local clone, `pnpm --filter @modeler/vscode-ext test:smoke` exits 0.
+**Status:** Deferred — see review-003 §1J. Move to Phase 1.1. Scaffold removed
+(placeholder test + broken runner script were cleaned up in review-003 Task 5).
 
 ## Section K — Broken-sample fixtures
 

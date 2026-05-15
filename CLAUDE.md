@@ -67,10 +67,16 @@ grammar  →  parser  →  semantics  →  lsp  →  vscode-ext
 - **Parser stays mechanical.** It mirrors ai-platform's Kotlin parser. Don't add resolution logic to `@modeler/parser` — that belongs in `@modeler/semantics`.
 - **Project root resolution.** Walk up looking for `modeler.toml`; otherwise treat the LSP `workspaceFolder` as root with convention defaults. Manifest schema is in §5 of the architecture doc.
 - **Source locations on every AST node.** The edit synthesizer relies on file/line/column/offsets being present and accurate for surgical text patches.
+- **`SourceLocation` is ANTLR-style.** `line`/`endLine` 1-indexed, `column`/`endColumn` 0-indexed, `offsetStart`/`offsetEnd` 0-indexed with `offsetEnd` exclusive. LSP consumers subtract 1 from line numbers (see `sourceLocationToRange` in `packages/lsp/src/server.ts`). For multi-token AST spans, `endColumn = stopToken.column + stopTokenLength` — **not** `startColumn + spanLength`. The latter formula was shipped once with a relaxed test that hid the bug; re-check `walker.ts`'s `makeSourceLocation` on any future change.
+- **`vscode-languageserver` deep import.** Under Node16 module resolution the package's typings only expose the obscure `createConnection(connectionFactory, watchDog, factories?)` overload. Use `import { createConnection, ProposedFeatures } from 'vscode-languageserver/lib/node/main.js'` in source code to get the stream-accepting overloads. Tests can use `'vscode-languageserver/node'` because vitest's resolver is permissive. Reaching for `as any` to silence overload errors is wrong every time.
 
 ### Cross-package integration tests
 
-`tests/integration/` is its own workspace member (`@modeler/integration-tests`); it depends on the built packages and runs end-to-end scenarios via Vitest. Run with `pnpm --filter @modeler/integration-tests test`.
+`tests/integration/` is its own workspace member (`@modeler/integration-tests`); it depends on the built packages and runs end-to-end scenarios via Vitest. Run with `pnpm --filter @modeler/integration-tests test`. **Put new LSP feature tests here, not in `packages/lsp/__tests__/`** — the `PassThrough`-paired-connection harness already there is the canonical pattern: boot `createServerConnection(server)`, send `initialize` + `didOpen`, exercise the request, ~10 lines per feature.
+
+### Phase review cadence
+
+The repo uses a `/review`-driven review cycle. Reviews and task lists live at repo root as numbered artifacts: `review-NNN.md` (prose findings) and `tasks-review-NNN.md` (actionable steps with verification commands). Numbering is serial across the whole project, not per-phase. Phase-progress docs (`docs/plan/progress-phase-NN.md`) record the developer's claims; reviews verify them against runtime. Treat `[x]` marks in progress docs as intent, not truth — verify before agreeing.
 
 ## Conventions
 

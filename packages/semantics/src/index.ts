@@ -1,21 +1,16 @@
-// Phase 2.B/C/D — symbol table, resolver, validator
-// TODO: Define SymbolTable interface with qname-indexed entries
-export interface SymbolTable {
-  // TODO: Map of qname -> SymbolDefinition
-  // Will include kind, name attribute, source location, file of origin
-}
-
-// TODO: Reference resolver
-export interface Resolver {
-  // resolve(path: string): ResolvedSymbol | UnresolvedReference
-}
-
-// TODO: Per-kind structural validator
-export interface Validator {
-  // validate(ast: Document, symbols: SymbolTable): Diagnostic[]
-}
-
-export function noop(): void {
-  // Placeholder function to keep package non-empty
-  // Will be replaced in Phase 2
-}
+export { parseManifest, resolveManifest } from './manifest.js';
+export type { ProjectManifest, ResolvedManifest } from './manifest.js';
+export { loadProjectFromOpenDocuments } from './project.js';
+export type { Project } from './project.js';
+export { qnameToString, parseQname, buildQname } from './qname.js';
+export type { Qname } from './qname.js';
+export { DocumentSymbolTable } from './symbol-table.js';
+export type { SymbolEntry } from './symbol-table.js';
+export { ProjectSymbolTable } from './project-symbols.js';
+export { Resolver } from './resolver.js';
+export type { ResolutionResult, LexicalScope } from './resolver.js';
+export { Validator } from './validator.js';
+export type { ValidationDiagnostic } from './validator.js';
+export { collectReferences, collectAllReferences, nestedDefs } from './references.js';
+export { ReferenceIndex } from './reference-index.js';
+export type { ReferenceLocation } from './reference-index.js';

@@ -24,7 +24,7 @@ export interface LspClient {
 
 export async function createLspClient(): Promise<LspClient> {
   const worker = new Worker(
-    new URL('@modeler/lsp/browser', import.meta.url),
+    new URL('../../lsp/dist/server-browser.js', import.meta.url),
     { type: 'module' }
   );
   const reader = new BrowserMessageReader(worker);

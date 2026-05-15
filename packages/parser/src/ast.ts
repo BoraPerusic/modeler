@@ -19,112 +19,345 @@ export interface SourceLocation {
   offsetEnd: number;
 }
 
+// ============================================================================
+// Common AST types (used by multiple per-kind types)
+// ============================================================================
+
+export type PropertyValue =
+  | StringValue
+  | TripleStringValue
+  | NumberValue
+  | BoolValue
+  | NullValue
+  | IdValue
+  | ListValue
+  | ObjectValue
+  | FunctionCallValue;
+
+export interface StringValue {
+  kind: 'string';
+  value: string;
+  source: SourceLocation;
+}
+
+export interface TripleStringValue {
+  kind: 'tripleString';
+  value: string;
+  source: SourceLocation;
+}
+
+export interface NumberValue {
+  kind: 'number';
+  value: number;
+  source: SourceLocation;
+}
+
+export interface BoolValue {
+  kind: 'bool';
+  value: boolean;
+  source: SourceLocation;
+}
+
+export interface NullValue {
+  kind: 'null';
+  source: SourceLocation;
+}
+
+export interface IdValue {
+  kind: 'id';
+  path: string;
+  parts: string[];
+  source: SourceLocation;
+}
+
+export interface ListValue {
+  kind: 'list';
+  items: PropertyValue[];
+  source: SourceLocation;
+}
+
+export interface ObjectValue {
+  kind: 'object';
+  entries: ObjectEntry[];
+  source: SourceLocation;
+}
+
+export interface ObjectEntry {
+  key: string;
+  value: PropertyValue;
+  source: SourceLocation;
+}
+
+export interface FunctionCallValue {
+  kind: 'functionCall';
+  name: string;
+  args: PropertyValue[];
+  source: SourceLocation;
+}
+
+export interface Reference {
+  path: string;
+  parts: string[];
+  source: SourceLocation;
+}
+
+export interface LocalizedString {
+  kind: 'localizedString';
+  entries: Record<string, string>;
+  source: SourceLocation;
+}
+
+export interface LocalizedStringList {
+  kind: 'localizedStringList';
+  entries: Record<string, string[]>;
+  source: SourceLocation;
+}
+
+export type DataType = SimpleDataType | StructuredDataType;
+
+export interface SimpleDataType {
+  kind: 'simple';
+  name: string;
+  source: SourceLocation;
+}
+
+export interface StructuredDataType {
+  kind: 'structured';
+  typeName: string;
+  length?: number;
+  precision?: number;
+  source: SourceLocation;
+}
+
+export type IndexType = 'primary' | 'secondary' | 'ordered' | 'btree' | 'fulltext';
+export type ConstraintType = 'unique' | 'notNull';
+export type QueryLanguage = 'SQL' | 'TRANSFORMATION_DSL' | 'DATAFRAME_DSL' | 'REL_NODE';
+export type ParameterDirection = 'IN' | 'OUT' | 'INOUT';
+
+export interface SearchBlock {
+  kind: 'searchBlock';
+  keywords?: LocalizedStringList;
+  patterns?: string[];
+  descriptions?: LocalizedStringList;
+  examples?: string[];
+  aliases?: string[];
+  source: SourceLocation;
+}
+
+export interface ValueLabels {
+  kind: 'valueLabels';
+  entries: Array<{ key: string; label: LocalizedString; source: SourceLocation }>;
+  source: SourceLocation;
+}
+
+export interface ParameterDef {
+  name: string;
+  type?: DataType;
+  label?: string;
+  direction?: ParameterDirection;
+  source: SourceLocation;
+}
+
+// ============================================================================
+// Schema directive
+// ============================================================================
+
 export interface SchemaDirective {
   schemaCode: string;
   namespace?: string;
   source: SourceLocation;
 }
 
+// ============================================================================
+// Per-kind definition types
+// ============================================================================
+
 export interface ModelDef {
   kind: 'model';
   name: string;
   source: SourceLocation;
+  description?: StringValue | TripleStringValue;
+  tags?: string[];
+  version?: string;
 }
 
 export interface TableDef {
   kind: 'table';
   name: string;
   source: SourceLocation;
+  description?: StringValue | TripleStringValue;
+  tags?: string[];
+  primaryKey?: string[];
+  columns?: ColumnDef[];
+  indices?: IndexDef[];
+  constraints?: ConstraintDef[];
 }
 
 export interface ViewDef {
   kind: 'view';
   name: string;
   source: SourceLocation;
+  description?: StringValue | TripleStringValue;
+  tags?: string[];
+  columns?: ColumnDef[];
+  definitionSql?: StringValue | TripleStringValue;
 }
 
 export interface ColumnDef {
   kind: 'column';
   name: string;
   source: SourceLocation;
+  description?: StringValue | TripleStringValue;
+  tags?: string[];
+  type?: DataType;
+  optional?: boolean;
+  isKey?: boolean;
+  searchable?: boolean;
+  indexed?: boolean;
 }
 
 export interface IndexDef {
   kind: 'index';
   name: string;
   source: SourceLocation;
+  description?: StringValue | TripleStringValue;
+  indexType?: IndexType;
+  columns?: string[];
 }
 
 export interface ConstraintDef {
   kind: 'constraint';
   name: string;
   source: SourceLocation;
+  description?: StringValue | TripleStringValue;
+  constraintType?: ConstraintType;
+  columns?: string[];
 }
 
 export interface FkDef {
   kind: 'fk';
   name: string;
   source: SourceLocation;
+  description?: StringValue | TripleStringValue;
+  tags?: string[];
+  from?: PropertyValue;
+  to?: PropertyValue;
 }
 
 export interface ProcedureDef {
   kind: 'procedure';
   name: string;
   source: SourceLocation;
+  description?: StringValue | TripleStringValue;
+  tags?: string[];
+  parameters?: ParameterDef[];
+  resultColumns?: ColumnDef[];
 }
 
 export interface EntityDef {
   kind: 'entity';
   name: string;
   source: SourceLocation;
+  description?: StringValue | TripleStringValue;
+  tags?: string[];
+  labelPlural?: string;
+  nameAttribute?: Reference;
+  codeAttribute?: Reference;
+  aliases?: string[];
+  attributes?: AttributeDef[];
+  roles?: string[];
+  displayLabel?: LocalizedString;
+  search?: SearchBlock;
 }
 
 export interface AttributeDef {
   kind: 'attribute';
   name: string;
   source: SourceLocation;
+  description?: StringValue | TripleStringValue;
+  tags?: string[];
+  type?: DataType;
+  isKey?: boolean;
+  optional?: boolean;
+  searchable?: boolean;
+  valueLabels?: ValueLabels;
+  displayLabel?: LocalizedString;
+  search?: SearchBlock;
 }
 
 export interface RelationDef {
   kind: 'relation';
   name: string;
   source: SourceLocation;
+  description?: StringValue | TripleStringValue;
+  tags?: string[];
+  from?: PropertyValue;
+  to?: PropertyValue;
+  cardinality?: ObjectValue;
+  join?: ListValue;
 }
 
 export interface Er2dbEntityDef {
   kind: 'er2dbEntity';
   name: string;
   source: SourceLocation;
+  description?: StringValue | TripleStringValue;
+  tags?: string[];
+  entity?: Reference;
+  target?: ObjectValue;
+  whereFilter?: ObjectValue;
 }
 
 export interface Er2dbAttributeDef {
   kind: 'er2dbAttribute';
   name: string;
   source: SourceLocation;
+  description?: StringValue | TripleStringValue;
+  tags?: string[];
+  attribute?: Reference;
+  target?: ObjectValue;
 }
 
 export interface Er2dbRelationDef {
   kind: 'er2dbRelation';
   name: string;
   source: SourceLocation;
+  description?: StringValue | TripleStringValue;
+  tags?: string[];
+  relation?: Reference;
+  fk?: Reference;
 }
 
 export interface QueryDef {
   kind: 'query';
   name: string;
   source: SourceLocation;
+  description?: StringValue | TripleStringValue;
+  tags?: string[];
+  language?: QueryLanguage;
+  parameters?: ParameterDef[];
+  sourceText?: StringValue | TripleStringValue;
+  search?: SearchBlock;
 }
 
 export interface RoleDef {
   kind: 'role';
   name: string;
   source: SourceLocation;
+  description?: StringValue | TripleStringValue;
+  tags?: string[];
+  label?: LocalizedString;
+  search?: SearchBlock;
 }
 
 export interface Er2cncRoleDef {
   kind: 'er2cncRole';
   name: string;
   source: SourceLocation;
+  description?: StringValue | TripleStringValue;
+  tags?: string[];
+  entity?: Reference;
+  role?: Reference;
 }
 
 export type Definition =
@@ -146,6 +379,10 @@ export type Definition =
   | RoleDef
   | Er2cncRoleDef;
 
+// ============================================================================
+// Document / parse result
+// ============================================================================
+
 export interface Document {
   schemaDirective?: SchemaDirective;
   definitions: Definition[];
@@ -153,6 +390,7 @@ export interface Document {
 }
 
 export interface ParseError {
+  code?: string;
   message: string;
   severity: 'error' | 'warning';
   source: SourceLocation;

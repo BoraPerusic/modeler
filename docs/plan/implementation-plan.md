@@ -10,12 +10,12 @@ The build is organized into six phases, executed mostly sequentially with one pa
 |---|---|---|---|
 | 0 | Vertical thin slice end-to-end | 1–2 weeks | None |
 | 1 | Foundation tier complete (highlighting, syntax diagnostics, language config, .ttrl support, diagnostic taxonomy, semantic tokens, parser error recovery, ai-platform sync CI, VS Code smoke test) | 1.5–2 weeks | Phase 0 (post review-001 P0 fixes) |
-| 2 | Core tier (semantics, resolver, go-to-def, find-refs, hover, undefined-ref diagnostics) | 3–4 weeks | Phase 0 (parser/AST), Phase 1 |
+| 2 | Core tier (full AST, project model, symbol table, resolver, validator, go-to-def, find-refs, hover, workspace symbols, semantic tokens, parse-recovery-info, VS Code smoke) | 4–5 weeks | Phase 1 |
 | 3 | Designer v1 (read-only, db + er, schema/detail toggles, layout persistence) | 3–4 weeks | Phase 0, Phase 2 (semantics over LSP) |
 | 4 | IntelliJ plugin v1 (LSP4IJ wrapper, file-type registration, bundled runtime) | 1–2 weeks | Phase 2 |
 | 5 | Hardening, packaging, distribution, docs | 1–2 weeks | Phases 1–4 |
 
-Total wall-clock estimate: **10.5–15.5 weeks** for v1, assuming one full-time developer plus Bora reviewing. Parallelization (e.g. Phase 3 starting once Phase 2 is half-done) can compress this to 8.5–10.5 weeks.
+Total wall-clock estimate: **11.5–16.5 weeks** for v1, assuming one full-time developer plus Bora reviewing. Parallelization (e.g. Phase 3 starting once Phase 2's §A–§C are stable) can compress this to 9.5–11.5 weeks.
 
 ## Phase 0 — vertical thin slice (1–2 weeks)
 
@@ -58,29 +58,31 @@ Detailed task breakdown in `tasks-phase-00-thin-slice.md`. After Phase 0, the de
 
 **Note on scope expansion vs the original 1-week estimate**: the bump to 1.5–2 weeks absorbs (a) the review-001 P1/P2 carryover (sections A and parts of B/C), (b) parser error recovery (Section F — needed for `parse-recovery-info` to be more than a formality), and (c) the cross-repo sync CI (Section I — deferred from Phase 0). The substantive Foundation-tier work itself is roughly the original 1-week estimate; carryover and infrastructure account for the rest.
 
-## Phase 2 — Core tier (3–4 weeks)
+## Phase 2 — Core tier (4–5 weeks)
 
-**Goal**: the semantic plumbing that makes the language understandable, plus the navigation and inspection features that depend on it.
+**Detailed task list:** [`tasks-phase-02-core.md`](tasks-phase-02-core.md).
 
-**Sub-phases**:
+**Goal**: take Phase 1's syntax-aware editor to a semantics-aware editor. After Phase 2, the parser produces a fully-populated AST; the semantics layer builds a project-wide symbol table from `.ttr` files plus stock vocabulary; cross-references resolve; a per-kind validator catches structural problems; the LSP exposes go-to-definition, find-references, hover, workspace symbols, and semantic tokens. Real users can author a TTR project in VS Code and feel the editor understands what they're writing.
 
-**2.A — AST completion (3–5 days)**. Fill in `@modeler/parser`'s AST: every `Definition` subtype, every property, full `PropertyValue` union, every inline-def list. Source locations on every node. CST view exposed (trivia preserved for the edit synthesizer). 100% golden-fixture coverage of `samples/` parsing without error.
+**Sub-phases** (sectioned in the task list as A–N):
+- **A** AST completion — full `PropertyValue` union (string, triple-string, number, bool, null, id, list, object, function-call), full per-kind property maps for all 17 `Definition` subtypes, inline def lists (`columns:`, `attributes:`, `parameters:`, etc.), `LocalizedString` / `LocalizedStringList` / `ValueLabels` / `SearchBlock` / `DataType` (shorthand + structured), `Reference` extraction. ~11 sub-sections; the largest part of Phase 2.
+- **B** Project model + `modeler.toml` — manifest types, TOML parsing, project-root resolution (walk-up to `modeler.toml`; convention default = workspace folder), `modeler/getProjectInfo` LSP method, sample manifest at `samples/v1-metadata/modeler.toml`
+- **C** Symbol table — qname structure, `DocumentSymbolTable`, `ProjectSymbolTable` (merge across documents, duplicate detection), stock-vocabulary loader (CNC roles), incremental rebuild on document change
+- **D** Reference resolver — dotted refs (schema-qualified vs project-relative), bare-id refs (lexical scope: attribute-within-entity, role-within-stock), `ResolutionResult` shape with `tried[]` chain
+- **E** Validator — required-property checks, cross-reference checks (FK from/to, mapping refs, primary-key columns, name-attribute), duplicate-definition checks, empty-block warnings
+- **F** Diagnostic-code expansion — new codes for unresolved-reference, duplicate-definition, required-property-missing, primary-key-column-not-found, entity-attribute-not-found, empty-localized-string, empty-search-block; severity per code; `docs/design/diagnostics.md` updated
+- **G** Go-to-definition — `textDocument/definition`, `findNodeAtPosition` helper
+- **H** Find-references — `ReferenceIndex` reverse index, `textDocument/references`
+- **I** Hover — `formatHover` markdown with description / kind / type / source link, localized per `[language].preferred`, `textDocument/hover`
+- **J** Workspace symbols — fuzzy search over project symbol table via `fuzzysort`, `workspace/symbol`
+- **K** Semantic tokens (carryover from Phase 1.G) — `textDocument/semanticTokens/full` for dotted refs and definition names
+- **L** `parse-recovery-info` emission (carryover from Phase 1.F) — `DefaultErrorStrategy` subclass that emits info diagnostics at recovery boundaries
+- **M** VS Code smoke test (carryover from Phase 1.J) — `@vscode/test-electron` boot, sample-file open, diagnostic flow assertions
+- **N** Documentation — progress doc, diagnostics catalog updates, semantics package README, LSP README
 
-**2.B — Symbol table (3–5 days)**. `@modeler/semantics`'s symbol table: per-document index keyed by qname; project-wide aggregator that merges per-document indexes; incremental rebuild on document change. Stock vocabulary auto-loaded ahead of project files. Conflict detection (duplicate qname across files).
+**Acceptance**: in `samples/v1-metadata/` opened in VS Code: Cmd-click a reference jumps to its definition; right-click → Find All References lists every use across files; hover shows description + kind + source link in Czech (manifest declares `preferred = "cs"`); Cmd-T fuzzy-finds any symbol; introducing a typo in a qname produces a red squiggly with code `ttr/unresolved-reference` and a useful "tried: …" message.
 
-**2.C — Reference resolver (4–6 days)**. Resolve `Reference(path)` against the symbol table. Dotted refs walk schema → namespace → kind → name. Bare refs use lexical scope (e.g. attribute names within an entity body). Resolution returns `ResolvedSymbol` or `UnresolvedReference` with the searched scope chain attached.
-
-**2.D — Validator (3–5 days)**. Per-kind structural validations: required properties, type matching, primary-key columns exist, etc. Diagnostics via the LSP push channel.
-
-**2.E — Go-to-definition (1–2 days)**. Standard LSP method, dispatches to the resolver.
-
-**2.F — Find-references (1–2 days)**. Reverse index built incrementally as the symbol table builds. Standard LSP method.
-
-**2.G — Hover (2–3 days)**. Returns formatted hover content: definition's `description`, type, schema kind, source file:line. Localized labels picked per `[language].preferred`.
-
-**2.H — Workspace symbol search (1 day)**. Fuzzy search over the project-wide symbol table.
-
-**Acceptance**: in a multi-file project (e.g. the full `samples/v1-metadata/` bundle), Cmd-clicking a reference jumps to its definition, hovering shows the description, find-references lists every use across files, and intentionally-introduced typos in qnames are flagged with red squigglies.
+**Note on scope expansion vs the original 3–4-week estimate**: the bump to 4–5 weeks absorbs (a) Section B project model (was implicit in 2.B; now its own sub-phase because the symbol table can't merge across files without a project root), (b) Section F diagnostic-code expansion (was implicit in 2.D; now explicit because Phase 1's code-taxonomy work raised the bar), and (c) the three Phase 1 carryovers in §K, §L, §M.
 
 ## Phase 3 — Designer v1 (3–4 weeks)
 
