@@ -1,4 +1,4 @@
-import type { RenderableSchemaCode, DisplayMode, LayoutFile, SymbolDetail } from '@modeler/lsp';
+import type { RenderableSchemaCode, DisplayMode, LayoutFile, SymbolDetail, ModelGraph } from '@modeler/lsp';
 import type { DesignerState } from './designer-state';
 
 export type DesignerAction =
@@ -10,6 +10,7 @@ export type DesignerAction =
   | { type: 'setNodePosition'; qname: string; x: number; y: number }
   | { type: 'selectSymbol'; qname: string | null }
   | { type: 'storeSymbolDetail'; detail: SymbolDetail }
+  | { type: 'storeGraph'; schema: RenderableSchemaCode; graph: ModelGraph }
   | { type: 'setError'; message: string | null };
 
 export function designerReducer(state: DesignerState, action: DesignerAction): DesignerState {
@@ -19,6 +20,7 @@ export function designerReducer(state: DesignerState, action: DesignerAction): D
         ...state,
         projectUri: action.projectUri,
         symbolDetails: {},
+        graphsBySchema: { db: null, er: null },
       };
     case 'loadLayout':
       return {
@@ -69,6 +71,14 @@ export function designerReducer(state: DesignerState, action: DesignerAction): D
         symbolDetails: {
           ...state.symbolDetails,
           [action.detail.qname]: action.detail,
+        },
+      };
+    case 'storeGraph':
+      return {
+        ...state,
+        graphsBySchema: {
+          ...state.graphsBySchema,
+          [action.schema]: action.graph,
         },
       };
     case 'setError':

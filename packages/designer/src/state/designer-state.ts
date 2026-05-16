@@ -1,4 +1,4 @@
-import type { RenderableSchemaCode, ViewportState as LspViewportState, SymbolDetail } from '@modeler/lsp';
+import type { RenderableSchemaCode, ViewportState as LspViewportState, SymbolDetail, ModelGraph } from '@modeler/lsp';
 
 export { LspViewportState as ViewportState };
 
@@ -10,6 +10,7 @@ export interface DesignerState {
   selectedSymbol: { qname: string } | null;
   projectUri: string | null;
   error: string | null;
+  graphsBySchema: Record<RenderableSchemaCode, ModelGraph | null>;
 }
 
 export const initialDesignerState: DesignerState = {
@@ -23,4 +24,5 @@ export const initialDesignerState: DesignerState = {
   selectedSymbol: null,
   projectUri: null,
   error: null,
+  graphsBySchema: { db: null, er: null },
 };

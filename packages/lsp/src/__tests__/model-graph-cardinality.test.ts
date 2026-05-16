@@ -10,6 +10,10 @@ describe('parseCardinality', () => {
     expect(parseCardinality('0..1')).toBe('zero-or-one');
   });
 
+  it("'0..*' → 'many'", () => {
+    expect(parseCardinality('0..*')).toBe('many');
+  });
+
   it("'n' → 'many'", () => {
     expect(parseCardinality('n')).toBe('many');
   });

@@ -1,6 +1,6 @@
 # Phase 3 — Contracts
 
-**Status:** v1, 2026-05-15. Companion to `tasks-phase-03-designer.md` and the per-section mini-task-lists under `docs/plan/phase-03/`.
+**Status:** v2, 2026-05-15. Companion to `tasks-phase-03-designer.md` and the per-section mini-task-lists under `docs/plan/phase-03/`.
 
 **Audience:** the implementer (junior dev or coding agent) executing Phase 3. The contracts here are non-negotiable — every type, every method signature, every JSON shape below is the single source of truth. If a mini-task-list shows a snippet that conflicts with this document, **this document wins**. Open a PR against this file to amend.
 
@@ -63,26 +63,16 @@ export interface ViewportState {
 }
 
 export interface DesignerState {
-  /** Which schema's graph is currently rendered. */
   activeSchema: RenderableSchemaCode;
-
-  /** One viewport per renderable schema; both initialized to defaults. */
   viewports: Record<RenderableSchemaCode, ViewportState>;
-
-  /** qname → on-canvas position. Empty until layout loads or user drags. */
   nodePositions: Record<string, { x: number; y: number }>;
-
-  /** Cached symbol-detail responses keyed by qname; cleared on loadProject. */
-  symbolDetails: Record<string, SymbolDetail>;          // see §5
-
-  /** Currently inspected node/edge. null when nothing is selected. */
+  symbolDetails: Record<string, SymbolDetail>;
   selectedSymbol: { qname: string } | null;
-
-  /** synthetic file:///<rootName> URI under which all project files were opened. */
   projectUri: string | null;
-
-  /** Last error from any LSP RPC; null when clear. */
   error: string | null;
+  /** Per-schema graph cache. Flipping the schema toggle reads from here
+   *  before falling back to a getModelGraph round-trip. Cleared on loadProject. */
+  graphsBySchema: Record<RenderableSchemaCode, ModelGraph | null>;
 }
 
 export const initialDesignerState: DesignerState = {
@@ -96,6 +86,7 @@ export const initialDesignerState: DesignerState = {
   selectedSymbol: null,
   projectUri: null,
   error: null,
+  graphsBySchema: { db: null, er: null },
 };
 ```
 
@@ -104,13 +95,14 @@ export const initialDesignerState: DesignerState = {
 ```ts
 export type DesignerAction =
   | { type: 'loadProject'; projectUri: string }
-  | { type: 'loadLayout';  layout: LayoutFile }                       // see §6
+  | { type: 'loadLayout';  layout: LayoutFile }
   | { type: 'switchSchema'; schema: RenderableSchemaCode }
   | { type: 'setDisplayMode'; schema: RenderableSchemaCode; mode: DisplayMode }
   | { type: 'setViewport';   schema: RenderableSchemaCode; viewport: Omit<ViewportState, 'displayMode'> }
   | { type: 'setNodePosition'; qname: string; x: number; y: number }
   | { type: 'selectSymbol';  qname: string | null }
   | { type: 'storeSymbolDetail'; detail: SymbolDetail }
+  | { type: 'storeGraph'; schema: RenderableSchemaCode; graph: ModelGraph }
   | { type: 'setError'; message: string | null };
 ```
 
@@ -549,6 +541,7 @@ export function extractCardinality(obj: ObjectValue | undefined):
 Test cases for `parseCardinality`:
 - `'1'` → `'one'`
 - `'0..1'` → `'zero-or-one'`
+- `'0..*'` → `'many'`
 - `'n'` → `'many'`
 - `'*'` → `'many'`
 - `'1..n'` → `'one-or-many'`
@@ -605,3 +598,7 @@ The contracts are versioned by document, not per-type. We do not need finer gran
 
 - **v0 (2026-05-15)** — initial draft for Phase 3 kickoff.
 - **v1 (2026-05-15)** — Section A review (review-005): selected path (a) — kept early LSP work from Section B. Added `parseCardinality`, `extractCardinality`, `renderDataType`, `validateLayout`, `emptyLayout`, `LayoutFile`, `ViewportState`, `SymbolDetail`, `PerKindData`, `ModelGraph`, `ModelGraphNode`, `ModelGraphRow`, `ModelGraphEdge`, `DataType`, `DataTypeSimple`, `DataTypeStructured`, `Cardinality`, `RenderableSchemaCode`, `DisplayMode` to `@modeler/lsp` exports; all covered by unit tests. Deleted `lsp-index.ts`, collapsed re-exports to `index.ts` only.
+- **v2 (2026-05-15)** — Section C: added `graphsBySchema: Record<RenderableSchemaCode, ModelGraph | null>` to `DesignerState` (cleared on `loadProject`) and the `storeGraph` action; cache exists so schema toggles after the first round-trip don't refetch. Name shortened from the mini-list's `graphsByCachedSchema` suggestion to `graphsBySchema`.
+- **v3 (2026-05-16)** — Section D (review-012): added `"0..*"` → `'many'` to accepted cardinality strings (§8). This is the only string used in `samples/v1-metadata/er.ttr`; omitting it would cause all relation edges in the demo to lose their glyphs.
+- **v4 (2026-05-16)** — Section D (review-012): chose approach A (SVG overlay) for glyph rendering over the implemented centered-label approach. Approach A places glyphs at edge endpoints oriented along the edge tangent, which is the correct visual semantics for Crow's-foot cardinality notation. The centered-label approach was abandoned because glyphs appeared at the edge midpoint with fixed (not tangent-derived) orientation — wrong for diagonal edges and semantically misleading. Documented in `docs/plan/phase-03/D-er-rendering.md` § D.4.
+- **v5 (2026-05-16)** — Section D (review-012): `ModelGraphNode.label` now localized per `manifest.preferredLanguage` for entity nodes (was always `def.name`). `ModelGraphRow` extended with `isNameAttribute: boolean` and `isCodeAttribute: boolean` for er attribute markers (★ / #).

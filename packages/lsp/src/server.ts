@@ -35,6 +35,7 @@ import {
   type ResolvedManifest,
   type ValidationDiagnostic,
 } from '@modeler/semantics';
+import { buildProjectModelGraph, emptyLayout, validateLayout, buildSymbolDetail, type LayoutFile, type RenderableSchemaCode } from './model-graph.js';
 
 export interface ServerOptions {
   /**
@@ -52,6 +53,13 @@ export interface ServerOptions {
   loadStock?: () => Promise<
     Array<{ uri: string; ast: Document; schemaCode: string; namespace: string }>
   >;
+
+  /**
+   * Optional in-memory layout store for browser mode. Maps project root URI
+   * to the current LayoutFile. Node mode reads/writes `.modeler/layout.ttrl`
+   * directly, so this is only used in browser workers.
+   */
+  layoutStore?: Map<string, LayoutFile>;
 }
 
 type FoundNode =
@@ -311,22 +319,71 @@ export function createServerConnection(
     return { ...project.manifest, root: project.root, ttrFileCount: project.ttrFiles.length };
   });
 
-  connection.onRequest('modeler/getModelGraph', (params: { textDocument: { uri: string } }) => {
-    const doc = documents.get(params.textDocument.uri);
-    if (!doc) {
-      return { nodes: [], edges: [] };
+  connection.onRequest('modeler/getModelGraph', (params: { textDocument: { uri: string }; schema: RenderableSchemaCode }) => {
+    if (params.schema !== 'db' && params.schema !== 'er') {
+      return { schemaCode: params.schema, nodes: [], edges: [] };
     }
 
-    const content = doc.getText();
-    const result = parseString(content, doc.uri);
+    const allDocs = documents.all();
+    const asts: Document[] = [];
+    for (const doc of allDocs) {
+      const content = doc.getText();
+      const result = parseString(content, doc.uri);
+      if (result.ast) asts.push(result.ast);
+    }
 
-    const nodes = (result.ast?.definitions ?? []).map((def: { name: string; kind: string }) => ({
-      qname: def.name,
-      kind: def.kind,
-      label: def.name,
-    }));
+    return buildProjectModelGraph(asts, params.schema, manifest.preferredLanguage);
+  });
 
-    return { nodes, edges: [] };
+  connection.onRequest('modeler/getLayout', async (_params: { projectRoot: string }): Promise<LayoutFile> => {
+    if (opts.layoutStore) {
+      return opts.layoutStore.get(_params.projectRoot) ?? emptyLayout();
+    }
+    const { readFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const layoutPath = join(_params.projectRoot, '.modeler', 'layout.ttrl');
+    try {
+      const raw = readFileSync(layoutPath, 'utf-8');
+      const parsed = JSON.parse(raw);
+      const validated = validateLayout(parsed);
+      if (validated) return validated;
+    } catch {
+      // fall through to emptyLayout
+    }
+    return emptyLayout();
+  });
+
+  connection.onRequest('modeler/setLayout', async (_params: { projectRoot: string; layout: LayoutFile }): Promise<{ ok: boolean }> => {
+    if (opts.layoutStore) {
+      opts.layoutStore.set(_params.projectRoot, _params.layout);
+      return { ok: true };
+    }
+    const { mkdirSync, writeFileSync, renameSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const dir = join(_params.projectRoot, '.modeler');
+    mkdirSync(dir, { recursive: true });
+    const tmpPath = join(dir, `layout.ttrl.${process.pid}.tmp`);
+    writeFileSync(tmpPath, JSON.stringify(_params.layout, null, 2), 'utf-8');
+    renameSync(tmpPath, join(dir, 'layout.ttrl'));
+    return { ok: true };
+  });
+
+  connection.onRequest('modeler/exportLayout', (_params: { projectRoot: string }): LayoutFile => {
+    if (opts.layoutStore) {
+      return opts.layoutStore.get(_params.projectRoot) ?? emptyLayout();
+    }
+    return emptyLayout();
+  });
+
+  connection.onRequest('modeler/applyGraphEdit', (_params: unknown): { ok: false; reason: string } => {
+    return { ok: false, reason: 'edit-mode-not-available-in-v1' };
+  });
+
+  connection.onRequest('modeler/getSymbolDetail', (params: { qname: string }) => {
+    return buildSymbolDetail(params.qname, projectSymbols, resolver, refIndex, manifest, (uri) => {
+      const doc = documents.get(uri);
+      return doc ? doc.getText() : null;
+    }, (content, uri) => parseString(content, uri));
   });
 
   connection.onDefinition((params) => {

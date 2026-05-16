@@ -19,8 +19,8 @@
 - [ ] `packages/lsp/src/__tests__/cardinality.test.ts` — unit over `parseCardinality` and `extractCardinality` per [contracts §8](../../design/phase-03-contracts.md#8-cardinality-mapping). One assertion per row in the §8 test-cases table.
 
 - [ ] `packages/designer/src/cy/__tests__/adapter-er.test.ts` — paralleling C's adapter test, focused on er.
-  - One entity with `displayLabel: { cs: 'Artikl', en: 'Item' }` and `preferredLanguage: 'cs'` → node `data.labelHtml` opens with the string `Artikl`.
-  - Same entity with `preferredLanguage: 'de'` (missing) → falls back to `'Item'` (en).
+  - One entity with `displayLabel: { cs: 'Artikl', en: 'Item' }` and `preferredLanguage: 'cs'` → node `data.label` is `'Artikl'`.
+  - Same entity with `preferredLanguage: 'de'` (missing) → falls back to the bare `name` (`'foo'`) per `phase-03-contracts.md` §4. (No language-to-language fallback.)
   - Same entity with no `displayLabel` → falls back to the bare `name`.
   - Relation edge with `fromCardinality: 'one'`, `toCardinality: 'many'` → edge element's `data` carries both values (the Canvas overlay reads them).
 

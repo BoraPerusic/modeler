@@ -16,6 +16,7 @@ describe('Header', () => {
         onSchemaChange={vi.fn()}
         onDisplayModeChange={vi.fn()}
         onToggleNlPane={vi.fn()}
+        onDirPick={vi.fn()}
       />
     );
     expect(screen.getByRole('button', { name: 'db' })).toBeDisabled();
@@ -32,6 +33,7 @@ describe('Header', () => {
         onSchemaChange={vi.fn()}
         onDisplayModeChange={vi.fn()}
         onToggleNlPane={vi.fn()}
+        onDirPick={vi.fn()}
       />
     );
     expect(screen.getByRole('button', { name: 'db' })).not.toBeDisabled();
@@ -49,6 +51,7 @@ describe('Header', () => {
         onSchemaChange={onSchemaChange}
         onDisplayModeChange={vi.fn()}
         onToggleNlPane={vi.fn()}
+        onDirPick={vi.fn()}
       />
     );
     fireEvent.click(screen.getByRole('button', { name: 'er' }));
@@ -65,6 +68,7 @@ describe('Header', () => {
         onSchemaChange={vi.fn()}
         onDisplayModeChange={vi.fn()}
         onToggleNlPane={vi.fn()}
+        onDirPick={vi.fn()}
       />
     );
     expect(screen.getByRole('button', { name: 'with constraints' })).toHaveClass('text-sky-500');
@@ -82,6 +86,7 @@ describe('Header', () => {
         onSchemaChange={vi.fn()}
         onDisplayModeChange={vi.fn()}
         onToggleNlPane={vi.fn()}
+        onDirPick={vi.fn()}
       />
     );
     expect(screen.getByText(/read-only/i)).toBeInTheDocument();
@@ -96,6 +101,7 @@ describe('Header', () => {
         onSchemaChange={vi.fn()}
         onDisplayModeChange={vi.fn()}
         onToggleNlPane={vi.fn()}
+        onDirPick={vi.fn()}
       />
     );
     expect(screen.getByText(/read-only/i)).toBeInTheDocument();
@@ -112,9 +118,27 @@ describe('Header', () => {
         onSchemaChange={vi.fn()}
         onDisplayModeChange={vi.fn()}
         onToggleNlPane={onToggleNlPane}
+        onDirPick={vi.fn()}
       />
     );
     fireEvent.click(screen.getByRole('button', { name: /nl/i }));
     expect(onToggleNlPane).toHaveBeenCalledOnce();
+  });
+
+  it('1.2f: file input has webkitdirectory attribute for folder upload', () => {
+    render(
+      <Header
+        activeSchema="db"
+        displayMode="just-names"
+        projectUri="file:///x"
+        onFileLoad={vi.fn()}
+        onSchemaChange={vi.fn()}
+        onDisplayModeChange={vi.fn()}
+        onToggleNlPane={vi.fn()}
+        onDirPick={vi.fn()}
+      />
+    );
+    const fileInput = screen.getByRole('button', { name: 'Load Project Folder' }).previousSibling as HTMLInputElement;
+    expect(fileInput).toHaveAttribute('webkitdirectory');
   });
 });

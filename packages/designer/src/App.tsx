@@ -8,12 +8,11 @@ import { createLspClient } from './lsp-client';
 import type { LspClient } from './lsp-client';
 import { designerReducer } from './state/designer-reducer';
 import { initialDesignerState } from './state/designer-state';
+import { loadProjectViaFileSystemAccessAPI, type ProjectFiles } from './fs/file-system';
+import { useProjectGraph } from './hooks/useProjectGraph';
 
 function App() {
   const [state, dispatch] = useReducer(designerReducer, initialDesignerState);
-  // NL-pane open/close is UI-only and not project-scoped, so it lives in local
-  // useState rather than DesignerState. If the pane gains state that must persist
-  // across project loads, move it into the reducer.
   const [nlPaneOpen, setNlPaneOpen] = useState(false);
   const clientRef = useRef<LspClient | null>(null);
 
@@ -36,15 +35,22 @@ function App() {
     };
   }, []);
 
-  // Graph fetching lives in §B (see docs/plan/phase-03/B-lsp-integration.md):
-  // a useEffect on (projectUri, activeSchema) will dispatch a 'setGraph' action.
+  useProjectGraph(state, dispatch, clientRef.current);
 
-  const handleFileLoad = async (content: string, uri: string) => {
+  const handleFileLoad = async (files: ProjectFiles) => {
     const client = clientRef.current;
     if (!client) return;
-    const fileUri = `file:///${uri}`;
-    await client.openDocument(fileUri, content);
-    dispatch({ type: 'loadProject', projectUri: fileUri });
+    await Promise.all(
+      Array.from(files.files.entries()).map(([relativePath, content]) =>
+        client.openDocument(`file:///${files.rootName}/${relativePath}`, content)
+      )
+    );
+    dispatch({ type: 'loadProject', projectUri: `file:///${files.rootName}` });
+  };
+
+  const handleDirPick = async () => {
+    const files = await loadProjectViaFileSystemAccessAPI();
+    if (files) handleFileLoad(files);
   };
 
   const handleNodeSelect = (qname: string) => {
@@ -61,6 +67,7 @@ function App() {
         onSchemaChange={(schema) => dispatch({ type: 'switchSchema', schema })}
         onDisplayModeChange={(mode) => dispatch({ type: 'setDisplayMode', schema: state.activeSchema, mode })}
         onToggleNlPane={() => setNlPaneOpen((v) => !v)}
+        onDirPick={handleDirPick}
       />
       {state.error && (
         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-2">
@@ -70,8 +77,7 @@ function App() {
       <div className="flex flex-1 overflow-hidden">
         <div className="flex-1 relative">
           <Canvas
-            projectUri={state.projectUri}
-            activeSchema={state.activeSchema}
+            graph={state.graphsBySchema[state.activeSchema]}
             displayMode={state.viewports[state.activeSchema].displayMode}
             onNodeSelect={handleNodeSelect}
           />

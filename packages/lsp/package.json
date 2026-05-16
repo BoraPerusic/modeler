@@ -25,8 +25,8 @@
   },
   "scripts": {
     "build": "tsc && pnpm run bundle-stdio && pnpm run bundle-browser",
-    "bundle-stdio": "esbuild src/server-stdio.ts --bundle --platform=node --format=esm --target=es2022 --outfile=dist/server-stdio.js --external:vscode-languageserver --external:vscode-languageserver-protocol --external:vscode-jsonrpc --external:antlr4ng",
-    "bundle-browser": "esbuild src/server-browser.ts --bundle --platform=browser --format=esm --target=es2022 --outfile=dist/server-browser.js --external:vscode-languageserver --external:vscode-languageserver-protocol --external:vscode-jsonrpc --external:fs --external:path --external:fuzzysort",
+    "bundle-stdio": "esbuild src/server-stdio.ts --bundle --platform=node --format=esm --target=es2022 --outfile=dist/server-stdio.js --external:vscode-languageserver --external:vscode-languageserver-protocol --external:vscode-jsonrpc --external:node:fs --external:node:path --external:antlr4ng --external:@modeler/parser --external:@modeler/semantics --external:@modeler/edit",
+    "bundle-browser": "esbuild src/server-browser.ts --bundle --platform=browser --format=esm --target=es2022 --outfile=dist/server-browser.js --external:vscode-languageserver --external:vscode-languageserver-protocol --external:vscode-jsonrpc --external:node:fs --external:node:path --external:fuzzysort --external:@modeler/parser --external:@modeler/semantics --external:@modeler/edit",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "lint": "eslint src"

@@ -16,4 +16,4 @@ export type {
   SymbolDetail,
 } from './model-graph.js';
 
-export { renderDataType, parseCardinality, extractCardinality, emptyLayout, validateLayout } from './model-graph.js';
+export { renderDataType, parseCardinality, extractCardinality, buildModelGraph, buildProjectModelGraph, buildSymbolDetail, emptyLayout, validateLayout } from './model-graph.js';

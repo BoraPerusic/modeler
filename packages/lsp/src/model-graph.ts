@@ -1,5 +1,6 @@
 import Ajv2020Module from 'ajv/dist/2020.js';
-import type { Definition, ObjectValue } from '@modeler/parser';
+import type { Definition, Document, EntityDef, ObjectValue, SimpleDataType, StructuredDataType, RoleDef } from '@modeler/parser';
+import type { ProjectSymbolTable, Resolver, ReferenceIndex, ResolvedManifest } from '@modeler/semantics';
 
 export type RenderableSchemaCode = 'db' | 'er';
 export type DisplayMode = 'just-names' | 'with-types' | 'with-constraints';
@@ -25,6 +26,8 @@ export interface ModelGraphRow {
   type: string | null;
   isKey: boolean;
   optional: boolean;
+  isNameAttribute: boolean;
+  isCodeAttribute: boolean;
 }
 
 export interface ModelGraphEdge {
@@ -45,11 +48,11 @@ export interface ModelGraph {
   edges: ModelGraphEdge[];
 }
 
+export type DataType = DataTypeSimple | DataTypeStructured | undefined;
 export interface DataTypeSimple { kind: 'simple'; name: string }
 export interface DataTypeStructured { kind: 'structured'; typeName: string; length?: number; precision?: number }
-export type DataType = DataTypeSimple | DataTypeStructured | undefined;
 
-export function renderDataType(t: DataType): string | null {
+export function renderDataType(t: DataType | SimpleDataType | StructuredDataType | undefined): string | null {
   if (!t) return null;
   if (t.kind === 'simple') return t.name;
   if (t.kind === 'structured') {
@@ -65,6 +68,7 @@ export function parseCardinality(s: string): Cardinality | null {
   switch (s) {
     case '1': return 'one';
     case '0..1': return 'zero-or-one';
+    case '0..*':
     case 'n':
     case '*': return 'many';
     case '1..n':
@@ -205,4 +209,365 @@ export interface SymbolDetail {
   sourceLine: number;
   perKindData: PerKindData;
   referencedBy: Array<{ qname: string; sourceUri: string; sourceLine: number }>;
+}
+
+function buildQname(schemaCode: string, namespace: string, parts: string[]): string {
+  return [schemaCode, namespace, ...parts].filter(s => s !== '').join('.');
+}
+
+function getDisplayLabel(def: Definition, preferredLang: string): string {
+  if (def.kind === 'entity') {
+    const entity = def as EntityDef;
+    if (entity.displayLabel && entity.displayLabel.kind === 'localizedString') {
+      const entry = entity.displayLabel.entries[preferredLang];
+      if (entry) return entry;
+    }
+  }
+  if (def.kind === 'table' && def.description) {
+    if (def.description.kind === 'string' || def.description.kind === 'tripleString') {
+      return def.description.value;
+    }
+  }
+  return def.name;
+}
+
+function getDescription(def: Definition): string | null {
+  if ('description' in def && def.description) {
+    if (def.description.kind === 'string' || def.description.kind === 'tripleString') {
+      return def.description.value;
+    }
+  }
+  return null;
+}
+
+function buildSymbolDetailForDef(
+  def: Definition,
+  schemaCode: string,
+  namespace: string,
+  preferredLang: string,
+  documentUri: string,
+  refIndex: ReferenceIndex
+): SymbolDetail {
+  const qname = buildQname(schemaCode, namespace, [def.name]);
+  const tags: string[] = ('tags' in def ? (def as { tags?: string[] }).tags : []) ?? [];
+
+  let perKindData: PerKindData = { kind: 'other' };
+  if (def.kind === 'table' && def.columns) {
+    const columns = (def.columns ?? []).map(col => ({
+      name: col.name,
+      qname: buildQname(schemaCode, namespace, [def.name, col.name]),
+      kind: 'column' as const,
+      type: renderDataType(col.type),
+      isKey: !!(col.isKey || (def.primaryKey ?? []).includes(col.name)),
+      optional: !!col.optional,
+      isNameAttribute: false,
+      isCodeAttribute: false,
+    }));
+    perKindData = { kind: 'table', columns, primaryKey: def.primaryKey ?? [] };
+  } else if (def.kind === 'view' && def.columns) {
+    const columns = (def.columns ?? []).map(col => ({
+      name: col.name,
+      qname: buildQname(schemaCode, namespace, [def.name, col.name]),
+      kind: 'column' as const,
+      type: renderDataType(col.type),
+      isKey: false,
+      optional: !!col.optional,
+      isNameAttribute: false,
+      isCodeAttribute: false,
+    }));
+    perKindData = { kind: 'view', columns };
+  } else if (def.kind === 'entity') {
+    const nameAttrPath = def.nameAttribute?.path;
+    const codeAttrPath = def.codeAttribute?.path;
+    const attributes = (def.attributes ?? []).map(attr => ({
+      name: attr.name,
+      qname: buildQname(schemaCode, namespace, [def.name, attr.name]),
+      kind: 'attribute' as const,
+      type: renderDataType(attr.type),
+      isKey: !!attr.isKey,
+      optional: !!attr.optional,
+      isNameAttribute: attr.name === nameAttrPath,
+      isCodeAttribute: attr.name === codeAttrPath,
+    }));
+    perKindData = {
+      kind: 'entity',
+      attributes,
+      nameAttributeQname: def.nameAttribute ? buildQname(schemaCode, namespace, [def.name, def.nameAttribute.path]) : null,
+      codeAttributeQname: def.codeAttribute ? buildQname(schemaCode, namespace, [def.name, def.codeAttribute.path]) : null,
+      roleQnames: def.roles ?? [],
+    };
+  } else if (def.kind === 'fk') {
+    const fromRef = def.from?.kind === 'id' ? { path: def.from.path, parts: def.from.parts } : null;
+    const toRef = def.to?.kind === 'id' ? { path: def.to.path, parts: def.to.parts } : null;
+    const fromQname = fromRef ? [schemaCode, namespace, fromRef.path].filter(s => s !== '').join('.') : null;
+    const toQname = toRef ? [schemaCode, namespace, toRef.path].filter(s => s !== '').join('.') : null;
+    perKindData = { kind: 'fk', fromQname: fromQname ?? '', toQname: toQname ?? '' };
+  } else if (def.kind === 'relation') {
+    const fromRef = def.from?.kind === 'id' ? { path: def.from.path, parts: def.from.parts } : null;
+    const toRef = def.to?.kind === 'id' ? { path: def.to.path, parts: def.to.parts } : null;
+    const fromQname = fromRef ? [schemaCode, namespace, fromRef.path].filter(s => s !== '').join('.') : null;
+    const toQname = toRef ? [schemaCode, namespace, toRef.path].filter(s => s !== '').join('.') : null;
+    const card = extractCardinality(def.cardinality);
+    perKindData = { kind: 'relation', fromQname: fromQname ?? '', toQname: toQname ?? '', fromCardinality: card.from, toCardinality: card.to };
+  } else if (def.kind === 'role') {
+    const labelByLanguage: Record<string, string> = {};
+    const role = def as RoleDef;
+    if (role.label && role.label.kind === 'localizedString') {
+      Object.assign(labelByLanguage, role.label.entries);
+    }
+    perKindData = { kind: 'role', labelByLanguage };
+  }
+
+  const referencedBy = refIndex.findByQname(qname).map(loc => ({
+    qname: loc.targetQname,
+    sourceUri: loc.documentUri,
+    sourceLine: loc.source.line,
+  }));
+
+  return {
+    qname,
+    kind: def.kind,
+    name: def.name,
+    label: getDisplayLabel(def, preferredLang),
+    description: getDescription(def),
+    tags,
+    sourceUri: documentUri,
+    sourceLine: def.source.line,
+    perKindData,
+    referencedBy,
+  };
+}
+
+export function buildSymbolDetail(
+  qname: string,
+  symbols: ProjectSymbolTable,
+  resolver: Resolver,
+  refIndex: ReferenceIndex,
+  manifest: ResolvedManifest,
+  getDocument: (uri: string) => string | null,
+  parseDocument: (content: string, uri: string) => { ast?: Document | null }
+): SymbolDetail | null {
+  const symbol = symbols.get(qname);
+  if (!symbol) return null;
+
+  const realDef = findDefByQname(symbol.documentUri, qname, getDocument, parseDocument);
+  if (!realDef) return null;
+
+  const schemaCode = qname.split('.')[0] ?? 'db';
+  const namespace = qname.split('.')[1] ?? '';
+  return buildSymbolDetailForDef(
+    realDef,
+    schemaCode,
+    namespace,
+    manifest.preferredLanguage,
+    symbol.documentUri,
+    refIndex
+  );
+}
+
+// v1 limitation: only top-level defs (table / view / entity / role / fk / relation
+// — though fk / relation are filtered out below) are looked up. Nested qnames
+// like `db.dbo.tableName.colName` produce a `name` of `tableName.colName` after
+// the slice(2).join('.') below, which never matches a top-level def.name, so
+// `findDefByQname` returns null and getSymbolDetail returns null. The Designer
+// inspector only opens on top-level nodes in v1, so this is enough for Phase 3;
+// remove this restriction when row-level inspection lands.
+function findDefByQname(
+  uri: string,
+  qname: string,
+  getDocument: (uri: string) => string | null,
+  parseDocument: (content: string, uri: string) => { ast?: Document | null }
+): Definition | null {
+  const content = getDocument(uri);
+  if (!content) return null;
+  const result = parseDocument(content, uri);
+  if (!result.ast) return null;
+  const parts = qname.split('.');
+  const schemaCode = parts[0] ?? 'db';
+  const namespace = parts[1] ?? '';
+  const name = parts.slice(2).join('.');
+  for (const def of result.ast.definitions) {
+    if (def.name === name && def.kind !== 'fk' && def.kind !== 'relation') {
+      const defSchema = result.ast.schemaDirective?.schemaCode ?? 'db';
+      const defNamespace = result.ast.schemaDirective?.namespace ?? '';
+      if (defSchema === schemaCode && defNamespace === namespace) return def;
+    }
+  }
+  return null;
+}
+
+function resolveRef(ref: { path: string; parts: string[] }, schemaCode: string, namespace: string, knownQnames: Set<string>): string | null {
+  // Fully-qualified ref like `db.dbo.TABLE.COLUMN`: drop trailing parts until a
+  // known table qname is found. Handles both `<schema>.<ns>.<table>` and the
+  // longer `<schema>.<ns>.<table>.<column>` form (FKs target columns but the
+  // edge is table-to-table).
+  if (ref.parts[0] && ['db', 'er', 'map', 'query', 'cnc'].includes(ref.parts[0])) {
+    for (let i = ref.parts.length; i >= 1; i--) {
+      const candidate = ref.parts.slice(0, i).join('.');
+      if (knownQnames.has(candidate)) return candidate;
+    }
+  }
+  // Bare ref relative to the current schema/namespace: `TABLE` or `TABLE.COLUMN`.
+  for (let i = 1; i <= ref.parts.length; i++) {
+    const tableParts = ref.parts.slice(0, i);
+    const candidate = [schemaCode, namespace, ...tableParts].filter(s => s !== '').join('.');
+    if (knownQnames.has(candidate)) return candidate;
+  }
+  return null;
+}
+
+export function buildModelGraph(ast: Document, schema: RenderableSchemaCode, preferredLang = 'en'): ModelGraph {
+  return buildProjectModelGraph([ast], schema, preferredLang);
+}
+
+export function buildProjectModelGraph(asts: Document[], schema: RenderableSchemaCode, preferredLang = 'en'): ModelGraph {
+  const nodes: ModelGraphNode[] = [];
+  const edges: ModelGraphEdge[] = [];
+  const knownNodes = new Map<string, { def: Definition; qname: string; schemaCode: string; namespace: string }>();
+
+  for (const ast of asts) {
+    if (ast.schemaDirective?.schemaCode && ast.schemaDirective.schemaCode !== schema) continue;
+
+    const schemaCode = ast.schemaDirective?.schemaCode ?? schema;
+    const namespace = ast.schemaDirective?.namespace ?? '';
+
+    for (const def of ast.definitions) {
+      if (def.kind === 'table' || def.kind === 'view' || def.kind === 'entity') {
+        const qname = buildQname(schemaCode, namespace, [def.name]);
+        knownNodes.set(qname, { def, qname, schemaCode, namespace });
+      }
+    }
+  }
+
+  const knownQnames = new Set(knownNodes.keys());
+
+  for (const [, { def, qname, schemaCode, namespace }] of knownNodes) {
+    if (def.kind === 'table') {
+      const rows: ModelGraphRow[] = (def.columns ?? []).map(col => ({
+        name: col.name,
+        qname: buildQname(schemaCode, namespace, [def.name, col.name]),
+        kind: 'column' as const,
+        type: renderDataType(col.type),
+        isKey: !!(col.isKey || (def.primaryKey ?? []).includes(col.name)),
+        optional: !!col.optional,
+        isNameAttribute: false,
+        isCodeAttribute: false,
+      }));
+      nodes.push({
+        qname,
+        kind: 'table',
+        name: def.name,
+        schemaCode: schema as RenderableSchemaCode,
+        label: def.name,
+        sourceUri: def.source.file,
+        sourceLocation: { line: def.source.line, column: def.source.column },
+        rows,
+      });
+    } else if (def.kind === 'view') {
+      const rows: ModelGraphRow[] = (def.columns ?? []).map(col => ({
+        name: col.name,
+        qname: buildQname(schemaCode, namespace, [def.name, col.name]),
+        kind: 'column' as const,
+        type: renderDataType(col.type),
+        isKey: false,
+        optional: !!col.optional,
+        isNameAttribute: false,
+        isCodeAttribute: false,
+      }));
+      nodes.push({
+        qname,
+        kind: 'view',
+        name: def.name,
+        schemaCode: schema as RenderableSchemaCode,
+        label: def.name,
+        sourceUri: def.source.file,
+        sourceLocation: { line: def.source.line, column: def.source.column },
+        rows,
+      });
+    } else if (def.kind === 'entity') {
+      const nameAttrPath = (def as EntityDef).nameAttribute?.path;
+      const codeAttrPath = (def as EntityDef).codeAttribute?.path;
+      const rows: ModelGraphRow[] = (def.attributes ?? []).map(attr => ({
+        name: attr.name,
+        qname: buildQname(schemaCode, namespace, [def.name, attr.name]),
+        kind: 'attribute' as const,
+        type: renderDataType(attr.type),
+        isKey: !!attr.isKey,
+        optional: !!attr.optional,
+        isNameAttribute: attr.name === nameAttrPath,
+        isCodeAttribute: attr.name === codeAttrPath,
+      }));
+      nodes.push({
+        qname,
+        kind: 'entity',
+        name: def.name,
+        schemaCode: schema as RenderableSchemaCode,
+        label: getDisplayLabel(def, preferredLang),
+        sourceUri: def.source.file,
+        sourceLocation: { line: def.source.line, column: def.source.column },
+        rows,
+      });
+    }
+  }
+
+  for (const ast of asts) {
+    if (ast.schemaDirective?.schemaCode && ast.schemaDirective.schemaCode !== schema) continue;
+
+    const schemaCode = ast.schemaDirective?.schemaCode ?? schema;
+    const namespace = ast.schemaDirective?.namespace ?? '';
+
+    for (const def of ast.definitions) {
+      if (def.kind === 'fk') {
+        const fromQname = extractFkRef(def.from, schemaCode, namespace, knownQnames);
+        const toQname = extractFkRef(def.to, schemaCode, namespace, knownQnames);
+        if (fromQname && toQname) {
+          edges.push({
+            id: buildQname(schemaCode, namespace, [def.name]),
+            qname: buildQname(schemaCode, namespace, [def.name]),
+            kind: 'fk',
+            fromNode: fromQname,
+            toNode: toQname,
+            fromCardinality: null,
+            toCardinality: null,
+            sourceUri: def.source.file,
+            sourceLocation: { line: def.source.line, column: def.source.column },
+          });
+        }
+      } else if (def.kind === 'relation') {
+        const fromRef = def.from?.kind === 'id' ? { path: def.from.path, parts: def.from.parts } : null;
+        const toRef = def.to?.kind === 'id' ? { path: def.to.path, parts: def.to.parts } : null;
+        const fromQname = fromRef ? resolveRef(fromRef, schemaCode, namespace, knownQnames) : null;
+        const toQname = toRef ? resolveRef(toRef, schemaCode, namespace, knownQnames) : null;
+        if (fromQname && toQname) {
+          const card = extractCardinality(def.cardinality);
+          edges.push({
+            id: buildQname(schemaCode, namespace, [def.name]),
+            qname: buildQname(schemaCode, namespace, [def.name]),
+            kind: 'relation',
+            fromNode: fromQname,
+            toNode: toQname,
+            fromCardinality: card.from,
+            toCardinality: card.to,
+            sourceUri: def.source.file,
+            sourceLocation: { line: def.source.line, column: def.source.column },
+          });
+        }
+      }
+    }
+  }
+
+  return { schemaCode: schema as RenderableSchemaCode, nodes, edges };
+}
+
+// FK edges are table-to-table; we pick the first column to derive the source
+// table — multi-column FKs collapse to one edge.
+function extractFkRef(pv: import('@modeler/parser').PropertyValue | undefined, schemaCode: string, namespace: string, knownQnames: Set<string>): string | null {
+  if (!pv) return null;
+  if (pv.kind === 'id') {
+    return resolveRef({ path: pv.path, parts: pv.parts }, schemaCode, namespace, knownQnames);
+  }
+  if (pv.kind === 'list' && pv.items[0]?.kind === 'id') {
+    return resolveRef({ path: pv.items[0].path, parts: pv.items[0].parts }, schemaCode, namespace, knownQnames);
+  }
+  return null;
 }

@@ -1,29 +1,34 @@
 // Phase-3 visual treatment: accent = text-sky-500 (active toggle), border-slate-300 (bar).
 // Owned here so §D and §E don't drift — see docs/plan/phase-03/A-designer-scaffold.md A.6.
 
-import { useRef } from 'react';
+import React, { useRef } from 'react';
 import type { RenderableSchemaCode, DisplayMode } from '@modeler/lsp';
+import { loadProjectViaUpload, type ProjectFiles } from '../fs/file-system';
 
 interface HeaderProps {
   activeSchema: RenderableSchemaCode;
   displayMode: DisplayMode;
   projectUri: string | null;
-  onFileLoad: (content: string, uri: string) => void;
+  onFileLoad: (files: ProjectFiles) => void;
   onSchemaChange: (schema: RenderableSchemaCode) => void;
   onDisplayModeChange: (mode: DisplayMode) => void;
   onToggleNlPane: () => void;
+  onDirPick: () => void;
 }
 
-export function Header({ activeSchema, displayMode, projectUri, onFileLoad, onSchemaChange, onDisplayModeChange, onToggleNlPane }: HeaderProps) {
+export function Header({ activeSchema, displayMode, projectUri, onFileLoad, onSchemaChange, onDisplayModeChange, onToggleNlPane, onDirPick }: HeaderProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const disabled = projectUri === null;
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const content = await file.text();
-    onFileLoad(content, file.name);
+    const input = e.target;
+    if (!input.files?.length) return;
+    const files = await loadProjectViaUpload(input);
+    onFileLoad(files);
+    input.value = '';
   };
+
+  const webkitDirProps = { webkitdirectory: '' } as React.InputHTMLAttributes<HTMLInputElement>;
 
   return (
     <header className="bg-white border-b border-slate-300 px-4 py-2 flex items-center justify-between">
@@ -72,14 +77,23 @@ export function Header({ activeSchema, displayMode, projectUri, onFileLoad, onSc
           type="file"
           ref={fileInputRef}
           onChange={handleFileChange}
-          accept=".ttr"
+          accept=".ttr,.ttrl,.toml"
+          multiple
           className="hidden"
+          {...webkitDirProps}
         />
         <button
           onClick={() => fileInputRef.current?.click()}
           className="px-4 py-2 bg-sky-500 text-white rounded hover:bg-sky-600 transition-colors"
         >
-          Load .ttr file
+          Load Project Folder
+        </button>
+        <button
+          onClick={onDirPick}
+          className="px-4 py-2 bg-slate-100 text-gray-700 border border-slate-300 rounded hover:bg-slate-200 transition-colors"
+          title="Open project folder (requires browser File System Access API support)"
+        >
+          Open Folder
         </button>
       </div>
     </header>

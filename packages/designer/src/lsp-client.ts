@@ -10,11 +10,16 @@ import {
   InitializeParams,
 } from 'vscode-languageserver-protocol';
 
-import type { ModelGraph, RenderableSchemaCode } from '@modeler/lsp';
+import type { ModelGraph, LayoutFile, SymbolDetail, RenderableSchemaCode } from '@modeler/lsp';
 
 export interface LspClient {
   openDocument(uri: string, content: string): Promise<void>;
   getModelGraph(uri: string, schema: RenderableSchemaCode): Promise<ModelGraph>;
+  getLayout(projectRoot: string): Promise<LayoutFile>;
+  setLayout(projectRoot: string, layout: LayoutFile): Promise<{ ok: boolean }>;
+  exportLayout(projectRoot: string): Promise<LayoutFile>;
+  applyGraphEdit(_params: unknown): Promise<{ ok: false; reason: string }>;
+  getSymbolDetail(qname: string): Promise<SymbolDetail | null>;
   onDiagnostics(handler: (uri: string, messages: string[]) => void): void;
   dispose(): void;
 }
@@ -49,6 +54,21 @@ export async function createLspClient(): Promise<LspClient> {
         textDocument: { uri },
         schema,
       }) as Promise<ModelGraph>;
+    },
+    async getLayout(projectRoot) {
+      return connection.sendRequest('modeler/getLayout', { projectRoot }) as Promise<LayoutFile>;
+    },
+    async setLayout(projectRoot, layout) {
+      return connection.sendRequest('modeler/setLayout', { projectRoot, layout }) as Promise<{ ok: boolean }>;
+    },
+    async exportLayout(projectRoot) {
+      return connection.sendRequest('modeler/exportLayout', { projectRoot }) as Promise<LayoutFile>;
+    },
+    async applyGraphEdit(_params) {
+      return connection.sendRequest('modeler/applyGraphEdit', _params) as Promise<{ ok: false; reason: string }>;
+    },
+    async getSymbolDetail(qname) {
+      return connection.sendRequest('modeler/getSymbolDetail', { qname }) as Promise<SymbolDetail | null>;
     },
     onDiagnostics(handler) {
       diagnosticHandlers.push(handler);

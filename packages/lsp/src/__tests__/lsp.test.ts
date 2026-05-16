@@ -103,10 +103,14 @@ describe('lsp', () => {
 
     const result = await clientConnection.sendRequest('modeler/getModelGraph', {
       textDocument: { uri: 'file:///test.ttr' },
-    }) as { nodes: Array<{ qname: string; kind: string; label: string }>; edges: unknown[] };
+      schema: 'er',
+    }) as { schemaCode: string; nodes: Array<{ qname: string; kind: string; label: string; rows: unknown[] }>; edges: unknown[] };
 
+    expect(result.schemaCode).toBe('er');
     expect(result.nodes).toHaveLength(1);
-    expect(result.nodes[0]).toEqual({ qname: 'foo', kind: 'entity', label: 'foo' });
+    expect(result.nodes[0].qname).toBe('er.foo');
+    expect(result.nodes[0].kind).toBe('entity');
+    expect(result.nodes[0].label).toBe('foo');
     expect(result.edges).toEqual([]);
   });
 

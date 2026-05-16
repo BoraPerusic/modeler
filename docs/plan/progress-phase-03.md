@@ -23,28 +23,28 @@
 - [x] A.6 Re-style for Phase-3 look (text-sky-500 active, border-slate-300 bar)
 
 ## Section B — LSP integration
-- [ ] B.1 `modeler/getModelGraph` rewrite (`model-graph.ts`)
-- [ ] B.2 Layout types + validator + handlers (`layout.ts`, `layout.schema.json`)
-- [ ] B.3 `modeler/applyGraphEdit` placeholder
-- [ ] B.4 `modeler/getSymbolDetail` handler
-- [ ] B.5 Designer-side `LspClient` expansion
-- [ ] B.6 File-system shim
-- [ ] B.7 Wire file-system shim into `App.tsx`
+- [x] B.1 `modeler/getModelGraph` rewrite (`model-graph.ts`) — multi-document via `buildProjectModelGraph`
+- [x] B.2 Layout types + validator + handlers — types/validator inlined in `model-graph.ts` (per A-time deviation, see contracts v1 changelog); handlers registered in `server.ts` with Node atomic write + browser in-memory `Map`
+- [x] B.3 `modeler/applyGraphEdit` placeholder
+- [x] B.4 `modeler/getSymbolDetail` handler — per-kind data via re-parsed AST; v1 limitation: only top-level defs (see `findDefByQname` comment + integration test 4.6)
+- [x] B.5 Designer-side `LspClient` expansion
+- [x] B.6 File-system shim
+- [x] B.7 Wire file-system shim into `App.tsx`
 
 ## Section C — db schema rendering
-- [ ] C.1 Add Cytoscape extensions
-- [ ] C.2 Write `cy/adapter.ts` (`modelGraphToCyElements`)
-- [ ] C.3 Refactor `Canvas.tsx` to consume `ModelGraph`
-- [ ] C.4 Layout-once-on-load semantics
-- [ ] C.5 Wire schema toggle
-- [ ] C.6 Wire display-mode toggle
+- [x] C.1 Add Cytoscape extensions (cose-bilkent, node-html-label)
+- [x] C.2 Write `cy/adapter.ts` (`modelGraphToCyElements`) + 7 unit tests
+- [x] C.3 Refactor `Canvas.tsx` to consume `ModelGraph`
+- [x] C.4 Layout-once-on-load semantics (cose-bilkent on graph change)
+- [x] C.5 Wire schema toggle (cache hit guard, F5 fix)
+- [x] C.6 Wire display-mode toggle (refresh labels only, no re-layout)
 
 ## Section D — er schema rendering
-- [ ] D.1 `cy/glyph-renderer.ts`
-- [ ] D.2 Cardinality mapping in the LSP
-- [ ] D.3 Extend adapter for er
-- [ ] D.4 Canvas overlay for glyphs
-- [ ] D.5 Visual review
+- [x] D.1 `cy/glyph-renderer.ts` — `glyphFor(card)` returning `<g class="glyph-<name>">` with plan-compliant child shapes; covered by `glyph-renderer.test.ts` with snapshot tests
+- [x] D.2 Cardinality mapping in LSP (already done in model-graph.ts; updated to include `"0..*"` → `'many'` per contract amendment v3)
+- [x] D.3 Extend adapter for er — `isNameAttribute`/`isCodeAttribute` markers in rows; entity label from `getDisplayLabel`; relation edges carry `fromCardinality`/`toCardinality`
+- [x] D.4 Canvas overlay for glyphs — SVG overlay via `cy.on('render zoom pan', renderOverlay)` + `requestAnimationFrame`; glyphs positioned at edge endpoints oriented along edge tangent; `glyphFor` consumed directly by the overlay
+- [ ] D.5 Visual review (manual, pending dev server)
 
 ## Section E — Inspector panel
 - [ ] E.1 `buildSymbolDetail` in LSP
@@ -112,10 +112,10 @@
 
 ## Test Results
 ```
-pnpm -r build:  ✅
-pnpm -r test:   ✅
-pnpm -r lint:   ✅
-pnpm -r typecheck: ✅
+pnpm -r build:        ✅
+pnpm -r test:         ✅  151 tests total (19 parser, 40 semantics, 35 lsp, 30 designer, 6 vscode-ext, 21 integration)
+pnpm -r lint:         ✅  0 errors, 0 warnings
+pnpm -r typecheck:    ✅
 ```
 
 ## Deferred from Phase 2

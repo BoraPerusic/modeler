@@ -3,7 +3,7 @@ import { designerReducer } from '../designer-reducer';
 import { initialDesignerState } from '../designer-state';
 import type { DesignerState } from '../designer-state';
 import type { DesignerAction } from '../designer-reducer';
-import type { SymbolDetail } from '@modeler/lsp';
+import type { SymbolDetail, ModelGraph } from '@modeler/lsp';
 
 describe('designerReducer', () => {
   it("'switchSchema' updates activeSchema", () => {
@@ -77,5 +77,18 @@ describe('designerReducer', () => {
     const action: DesignerAction = { type: 'loadProject', projectUri: 'file:///x' };
     const state = designerReducer(stateWithDetails, action);
     expect(state.symbolDetails).toEqual({});
+  });
+
+  it("'loadProject' resets graphsBySchema cache", () => {
+    const stateWithGraphs: DesignerState = {
+      ...initialDesignerState,
+      graphsBySchema: {
+        db: { schemaCode: 'db', nodes: [], edges: [] } as unknown as ModelGraph,
+        er: { schemaCode: 'er', nodes: [], edges: [] } as unknown as ModelGraph,
+      },
+    };
+    const action: DesignerAction = { type: 'loadProject', projectUri: 'file:///y' };
+    const state = designerReducer(stateWithGraphs, action);
+    expect(state.graphsBySchema).toEqual({ db: null, er: null });
   });
 });

@@ -122,18 +122,29 @@ describe('lsp integration', () => {
 
     const result = await clientConnection.sendRequest('modeler/getModelGraph', {
       textDocument: { uri: fileUri },
-    }) as { nodes: Array<{ qname: string; kind: string; label: string }>; edges: unknown[] };
+      schema: 'er',
+    }) as { schemaCode: string; nodes: Array<{ qname: string; kind: string; label: string }>; edges: Array<{ fromNode: string; toNode: string }> };
 
+    expect(result.schemaCode).toBe('er');
     expect(result.nodes.length).toBeGreaterThan(0);
     expect(result.nodes.every(n => typeof n.qname === 'string' && typeof n.kind === 'string' && typeof n.label === 'string')).toBe(true);
     expect(Array.isArray(result.edges)).toBe(true);
+    expect(result.edges.length).toBeGreaterThanOrEqual(5);
+    for (const edge of result.edges) {
+      const fromNode = result.nodes.find(n => n.qname === edge.fromNode);
+      const toNode = result.nodes.find(n => n.qname === edge.toNode);
+      expect(fromNode, `edge.fromNode ${edge.fromNode} should resolve to a node`).toBeDefined();
+      expect(toNode, `edge.toNode ${edge.toNode} should resolve to a node`).toBeDefined();
+    }
   });
 
   it('modeler/getModelGraph returns empty for unknown document', async () => {
     const result = await clientConnection.sendRequest('modeler/getModelGraph', {
       textDocument: { uri: 'file:///unknown.ttr' },
-    }) as { nodes: unknown[]; edges: unknown[] };
+      schema: 'db',
+    }) as { schemaCode: string; nodes: unknown[]; edges: unknown[] };
 
+    expect(result.schemaCode).toBe('db');
     expect(result.nodes).toHaveLength(0);
     expect(result.edges).toHaveLength(0);
   });
