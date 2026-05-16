@@ -119,7 +119,7 @@ describe('Phase 3 custom LSP methods', () => {
   });
 
   it('4.4 getSymbolDetail for er.entity.artikl returns Czech label, description, perKindData, referencedBy', async () => {
-    const ttrFiles = await getAllTtrFiles(samplesDir, ['broken']);
+    const ttrFiles = await getAllTtrFiles(samplesDir, ['broken', 'v1-mini']);
     for (const file of ttrFiles) {
       const content = await import('fs/promises').then(fs => fs.readFile(file, 'utf-8'));
       client.sendNotification('textDocument/didOpen', {
@@ -152,7 +152,7 @@ describe('Phase 3 custom LSP methods', () => {
   }, 10000);
 
   it('4.5 getModelGraph with schema db on multi-file project returns >= 5 edges', async () => {
-    const ttrFiles = await getAllTtrFiles(samplesDir, ['broken']);
+    const ttrFiles = await getAllTtrFiles(samplesDir, ['broken', 'v1-mini']);
     for (const file of ttrFiles) {
       const content = await import('fs/promises').then(fs => fs.readFile(file, 'utf-8'));
       client.sendNotification('textDocument/didOpen', {
@@ -186,7 +186,7 @@ describe('Phase 3 custom LSP methods', () => {
   }, 10000);
 
   it('4.5b getModelGraph with schema er returns relation edges with from/toCardinality and localized entity labels', async () => {
-    const ttrFiles = await getAllTtrFiles(samplesDir, ['broken']);
+    const ttrFiles = await getAllTtrFiles(samplesDir, ['broken', 'v1-mini']);
     for (const file of ttrFiles) {
       const content = await import('fs/promises').then(fs => fs.readFile(file, 'utf-8'));
       client.sendNotification('textDocument/didOpen', {
@@ -228,7 +228,7 @@ describe('Phase 3 custom LSP methods', () => {
     // The Designer inspector only opens on top-level nodes in v1; nested
     // qnames like db.dbo.QCENSKUP_DF.IDCENSKUP intentionally resolve to null.
     // See findDefByQname in packages/lsp/src/model-graph.ts.
-    const ttrFiles = await getAllTtrFiles(samplesDir, ['broken']);
+    const ttrFiles = await getAllTtrFiles(samplesDir, ['broken', 'v1-mini']);
     for (const file of ttrFiles) {
       const content = await import('fs/promises').then(fs => fs.readFile(file, 'utf-8'));
       client.sendNotification('textDocument/didOpen', {

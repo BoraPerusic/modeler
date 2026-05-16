@@ -11,6 +11,7 @@ import {
 } from 'vscode-languageserver-protocol';
 
 import type { ModelGraph, LayoutFile, SymbolDetail, RenderableSchemaCode } from '@modeler/lsp';
+import LspWorker from '@modeler/lsp/browser?worker';
 
 export interface LspClient {
   openDocument(uri: string, content: string): Promise<void>;
@@ -25,10 +26,7 @@ export interface LspClient {
 }
 
 export async function createLspClient(): Promise<LspClient> {
-  const worker = new Worker(
-    new URL('../../lsp/dist/server-browser.js', import.meta.url),
-    { type: 'module' }
-  );
+  const worker = new LspWorker();
   const reader = new BrowserMessageReader(worker);
   const writer = new BrowserMessageWriter(worker);
   const connection = createProtocolConnection(reader, writer);

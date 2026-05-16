@@ -23,19 +23,15 @@ vi.mock('cytoscape', () => {
       forEach: (cb: (e: unknown) => void) => {
         cb({
           data: (k: string) => k === 'fromCardinality' ? 'one' : k === 'toCardinality' ? 'many' : k === 'kind' ? 'relation' : undefined,
-          sourceEndpoint: () => ({ x: 0, y: 0 }),
-          targetEndpoint: () => ({ x: 100, y: 0 }),
-          source: () => ({ renderedPosition: () => ({ x: 0, y: 0 }) }),
-          target: () => ({ renderedPosition: () => ({ x: 100, y: 0 }) }),
+          renderedSourceEndpoint: () => ({ x: 0, y: 0 }),
+          renderedTargetEndpoint: () => ({ x: 100, y: 0 }),
         });
       },
       [Symbol.iterator]: function* () {
         yield {
           data: (k: string) => k === 'fromCardinality' ? 'one' : k === 'toCardinality' ? 'many' : k === 'kind' ? 'relation' : undefined,
-          sourceEndpoint: () => ({ x: 0, y: 0 }),
-          targetEndpoint: () => ({ x: 100, y: 0 }),
-          source: () => ({ renderedPosition: () => ({ x: 0, y: 0 }) }),
-          target: () => ({ renderedPosition: () => ({ x: 100, y: 0 }) }),
+          renderedSourceEndpoint: () => ({ x: 0, y: 0 }),
+          renderedTargetEndpoint: () => ({ x: 100, y: 0 }),
         };
       },
     })),

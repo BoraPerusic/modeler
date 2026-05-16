@@ -31,11 +31,21 @@ function renderRowHtml(row: ModelGraphRow, displayMode: DisplayMode): string {
 }
 
 function nodeLabelHtml(node: ModelGraphNode, displayMode: DisplayMode): string {
-  if (node.rows.length === 0) return '';
+  const title = `<div class="cy-node-title">${escape(node.label)}</div>`;
   const rows = node.rows
     .map((r) => `<div class="cy-row">${renderRowHtml(r, displayMode)}</div>`)
     .join('');
-  return `<div class="cy-node-label">${rows}</div>`;
+  return `<div class="cy-node-label">${title}${rows ? `<div class="cy-rows">${rows}</div>` : ''}</div>`;
+}
+
+// Node body must be tall enough to host the HTML label. The HTML overlay is
+// roughly: 28 px title + 18 px per row + 12 px padding.
+const ROW_HEIGHT_PX = 18;
+const TITLE_HEIGHT_PX = 28;
+const VERTICAL_PADDING_PX = 12;
+
+function nodeHeight(node: ModelGraphNode): number {
+  return TITLE_HEIGHT_PX + node.rows.length * ROW_HEIGHT_PX + VERTICAL_PADDING_PX;
 }
 
 export function modelGraphToCyElements(
@@ -48,10 +58,14 @@ export function modelGraphToCyElements(
     elements.push({
       group: 'nodes',
       data: {
+        // Cytoscape uses `id` to match `source`/`target` on edges — must equal the qname
+        // that ModelGraphEdge.fromNode / toNode reference.
+        id: node.qname,
         qname: node.qname,
         kind: node.kind,
         label: node.label,
         labelHtml: nodeLabelHtml(node, displayMode),
+        h: nodeHeight(node),
       },
     });
   }

@@ -33,7 +33,11 @@ describe('modelGraphToCyElements', () => {
       group: 'nodes',
       data: expect.objectContaining({ qname: 'db.dbo.bar', kind: 'table', label: 'bar' }),
     });
-    expect((els[0].data as Record<string, unknown>).labelHtml).toBe('');
+    // labelHtml always contains the node title; with zero rows the row block is omitted.
+    const html = (els[0].data as Record<string, unknown>).labelHtml as string;
+    expect(html).toContain('cy-node-title');
+    expect(html).toContain('bar');
+    expect(html).not.toContain('cy-rows');
   });
 
   it('just-names includes only row names', () => {

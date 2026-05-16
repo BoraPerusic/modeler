@@ -4,6 +4,7 @@ import { Header } from './components/Header';
 import { Canvas } from './components/Canvas';
 import { InspectorPanel } from './components/InspectorPanel';
 import { NlPane } from './components/NlPane';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { createLspClient } from './lsp-client';
 import type { LspClient } from './lsp-client';
 import { designerReducer } from './state/designer-reducer';
@@ -76,11 +77,16 @@ function App() {
       )}
       <div className="flex flex-1 overflow-hidden">
         <div className="flex-1 relative">
-          <Canvas
-            graph={state.graphsBySchema[state.activeSchema]}
-            displayMode={state.viewports[state.activeSchema].displayMode}
-            onNodeSelect={handleNodeSelect}
-          />
+          <ErrorBoundary
+            label={`${state.activeSchema} schema`}
+            resetKey={`${state.projectUri}|${state.activeSchema}`}
+          >
+            <Canvas
+              graph={state.graphsBySchema[state.activeSchema]}
+              displayMode={state.viewports[state.activeSchema].displayMode}
+              onNodeSelect={handleNodeSelect}
+            />
+          </ErrorBoundary>
         </div>
         <InspectorPanel
           selectedSymbol={state.selectedSymbol}

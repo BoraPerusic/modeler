@@ -66,27 +66,33 @@ export function Canvas({ graph, displayMode, onNodeSelect }: CanvasProps) {
           {
             selector: 'node',
             style: {
-              'background-color': '#0f172a',
+              shape: 'round-rectangle',
+              'background-color': '#ffffff',
+              'background-opacity': 1,
               'border-width': 1,
-              'border-color': '#475569',
-              color: '#1e293b',
-              'font-size': '11px',
-              'text-valign': 'bottom',
-              'text-halign': 'center',
-              'font-family': 'ui-monospace, monospace',
+              'border-color': '#64748b',
+              width: 220,
+              height: 'data(h)',
+              // The HTML overlay (cytoscape-node-html-label) provides the visible content.
+              // We zero out cytoscape's own label so it doesn't render twice.
+              'text-opacity': 0,
             },
           },
           {
             selector: 'node[kind = "table"]',
-            style: { shape: 'round-rectangle', width: 200, height: 'label' },
+            style: { 'border-color': '#3b82f6' },
           },
           {
             selector: 'node[kind = "view"]',
-            style: { shape: 'round-rectangle', width: 200, height: 'label' },
+            style: { 'border-color': '#8b5cf6' },
           },
           {
             selector: 'node[kind = "entity"]',
-            style: { shape: 'round-rectangle', width: 200, height: 'label' },
+            style: { 'border-color': '#10b981' },
+          },
+          {
+            selector: 'node:selected',
+            style: { 'border-width': 2, 'border-color': '#0ea5e9' },
           },
           {
             selector: 'edge',
@@ -155,8 +161,11 @@ export function Canvas({ graph, displayMode, onNodeSelect }: CanvasProps) {
       name: 'cose-bilkent',
       randomize: false,
       animate: false,
-      nodeRepulsion: 4500,
-      idealEdgeLength: 200,
+      nodeRepulsion: 8000,
+      idealEdgeLength: 280,
+      edgeElasticity: 0.45,
+      gravity: 0.15,
+      padding: 30,
     }).run();
   }, [graph]);
 
@@ -185,15 +194,18 @@ export function Canvas({ graph, displayMode, onNodeSelect }: CanvasProps) {
       const overlay = overlayEl;
       if (!overlay) return;
       const relationEdges = cy.edges('[kind = "relation"]');
+      const zoom = cy.zoom();
 
       const svgParts: string[] = [];
       for (const edge of relationEdges) {
         const fromCard = edge.data('fromCardinality') as string | null;
         const toCard = edge.data('toCardinality') as string | null;
 
-        // rendered in screen coordinates, already at edge-node boundary
-        const sEnd = edge.sourceEndpoint() as { x: number; y: number };
-        const tEnd = edge.targetEndpoint() as { x: number; y: number };
+        // Screen-coordinate endpoints (already include pan + zoom). The glyph's
+        // internal length is in model-pixels, so the outer transform applies
+        // `scale(zoom)` to keep the rendered size proportional to the graph.
+        const sEnd = edge.renderedSourceEndpoint() as { x: number; y: number };
+        const tEnd = edge.renderedTargetEndpoint() as { x: number; y: number };
         const sx = sEnd.x;
         const sy = sEnd.y;
         const tx = tEnd.x;
@@ -204,19 +216,23 @@ export function Canvas({ graph, displayMode, onNodeSelect }: CanvasProps) {
         const length = Math.sqrt(dx * dx + dy * dy);
         if (length === 0) continue;
 
-        const nx = dx / length;
-        const ny = dy / length;
-        const angle = Math.atan2(ny, nx) * (180 / Math.PI);
+        // Edge direction (source → target) in degrees.
+        const angle = Math.atan2(dy, dx) * (180 / Math.PI);
 
         const fromGlyph = fromCard ? glyphFor(fromCard as Cardinality) : '';
         const toGlyph = toCard ? glyphFor(toCard as Cardinality) : '';
 
         if (fromGlyph) {
-          const fromAngle = angle + 180;
-          svgParts.push(`<g transform="translate(${sx},${sy}) rotate(${fromAngle})">${fromGlyph}</g>`);
+          // At the source endpoint, outward = toward target, so local +x = edge direction.
+          svgParts.push(
+            `<g transform="translate(${sx},${sy}) rotate(${angle}) scale(${zoom})">${fromGlyph}</g>`
+          );
         }
         if (toGlyph) {
-          svgParts.push(`<g transform="translate(${tx},${ty}) rotate(${angle})">${toGlyph}</g>`);
+          // At the target endpoint, outward = back toward source, so local +x = -edge direction.
+          svgParts.push(
+            `<g transform="translate(${tx},${ty}) rotate(${angle + 180}) scale(${zoom})">${toGlyph}</g>`
+          );
         }
       }
 
