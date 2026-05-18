@@ -1,84 +1,311 @@
-import { useEffect, useRef } from 'react';
-import cytoscape from 'cytoscape';
+import { useEffect, useRef, useState } from 'react';
+import type { ModelGraph, DisplayMode, Cardinality, RenderableSchemaCode, ViewportState } from '@modeler/lsp';
+import type { LspClient } from '../lsp-client';
+import { modelGraphToCyElements } from '../cy/adapter';
+import { glyphFor } from '../cy/glyph-renderer';
+import { buildLayout, applyPositions } from '../cy/save-layout';
+import { debounce } from '../util/debounce';
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type CytoscapeInstance = any;
+
+// Module-scope promise: loads cytoscape + extensions once, registers extensions globally.
+const cytoscapeReadyPromise = Promise.all([
+  import('cytoscape'),
+  import('cytoscape-cose-bilkent'),
+  import('cytoscape-node-html-label'),
+]).then(([cyMod, coseMod, nlMod]) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const cytoscape = (cyMod as any).default ?? cyMod;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const cose = (coseMod as any).default ?? coseMod;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const nl = (nlMod as any).default ?? nlMod;
+
+  cytoscape.use(cose);
+  nl(cytoscape);
+  return cytoscape;
+});
 
 interface CanvasProps {
-  nodes: Array<{ qname: string; kind: string; label: string }>;
-  edges: Array<unknown>;
-  onNodeSelect: (node: { qname: string; kind: string; label: string }) => void;
+  graph: ModelGraph | null;
+  displayMode: DisplayMode;
+  activeSchema: RenderableSchemaCode;
+  viewports: Record<RenderableSchemaCode, ViewportState>;
+  nodePositions: Record<string, { x: number; y: number }>;
+  lspClient: LspClient | null;
+  projectRoot: string | null;
+  onNodeSelect: (qname: string | null) => void;
 }
 
-export function Canvas({ nodes, edges: _edges, onNodeSelect }: CanvasProps) {
+export function Canvas({ graph, displayMode, activeSchema, viewports, nodePositions, lspClient, projectRoot, onNodeSelect }: CanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const cyRef = useRef<cytoscape.Core | null>(null);
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const cyRef = useRef<CytoscapeInstance | null>(null);
+  const displayModeRef = useRef<DisplayMode>(displayMode);
+  const graphRef = useRef<ModelGraph | null>(graph);
+  const onNodeSelectRef = useRef(onNodeSelect);
+  const lspClientRef = useRef<LspClient | null>(null);
+  const projectRootRef = useRef<string | null>(null);
+  const nodePositionsRef = useRef(nodePositions);
+  const activeSchemaRef = useRef(activeSchema);
+  const viewportsRef = useRef(viewports);
+  const cyInitRef = useRef(false);
+  const rafRef = useRef<number | null>(null);
+  const [cyReady, setCyReady] = useState(false);
+
+  useEffect(() => { onNodeSelectRef.current = onNodeSelect; }, [onNodeSelect]);
+  useEffect(() => { displayModeRef.current = displayMode; }, [displayMode]);
+  useEffect(() => { graphRef.current = graph; }, [graph]);
+  useEffect(() => { lspClientRef.current = lspClient; }, [lspClient]);
+  useEffect(() => { projectRootRef.current = projectRoot; }, [projectRoot]);
+  useEffect(() => { nodePositionsRef.current = nodePositions; }, [nodePositions]);
+  useEffect(() => { activeSchemaRef.current = activeSchema; }, [activeSchema]);
+  useEffect(() => { viewportsRef.current = viewports; }, [viewports]);
 
   useEffect(() => {
-    if (!containerRef.current) return;
+    if (cyInitRef.current || !containerRef.current) return;
+    cyInitRef.current = true;
 
-    cyRef.current = cytoscape({
-      container: containerRef.current,
-      style: [
-        {
-          selector: 'node',
-          style: {
-            label: 'data(label)',
-            'background-color': '#0ea5e9',
-            color: '#1e293b',
-            'font-size': '12px',
-            'text-valign': 'center',
-            'text-halign': 'center',
-            width: 40,
-            height: 40,
-          },
-        },
-        {
-          selector: 'edge',
-          style: {
-            width: 2,
-            'line-color': '#94a3b8',
-            'target-arrow-color': '#94a3b8',
-            'target-arrow-shape': 'triangle',
-          },
-        },
-      ],
-      layout: {
-        name: 'circle',
-        padding: 50,
-      },
-    });
+    cytoscapeReadyPromise.then((cytoscape) => {
+      if (!containerRef.current) return;
 
-    cyRef.current.on('tap', 'node', (evt) => {
-      const node = evt.target.data();
-      onNodeSelect(node);
+      const cy = cytoscape({
+        container: containerRef.current,
+        style: [
+          {
+            selector: 'node',
+            style: {
+              shape: 'round-rectangle',
+              'background-color': '#ffffff',
+              'background-opacity': 1,
+              'border-width': 1,
+              'border-color': '#64748b',
+              width: 220,
+              height: 'data(h)',
+              'text-opacity': 0,
+            },
+          },
+          {
+            selector: 'node[kind = "table"]',
+            style: { 'border-color': '#3b82f6' },
+          },
+          {
+            selector: 'node[kind = "view"]',
+            style: { 'border-color': '#8b5cf6' },
+          },
+          {
+            selector: 'node[kind = "entity"]',
+            style: { 'border-color': '#10b981' },
+          },
+          {
+            selector: 'node:selected',
+            style: { 'border-width': 2, 'border-color': '#0ea5e9' },
+          },
+          {
+            selector: 'edge',
+            style: {
+              width: 1.5,
+              'line-color': '#3b82f6',
+              'target-arrow-color': '#3b82f6',
+              'target-arrow-shape': 'triangle',
+              'curve-style': 'bezier',
+            },
+          },
+          {
+            selector: 'edge[kind = "fk"]',
+            style: { 'line-color': '#3b82f6', 'target-arrow-color': '#3b82f6', 'target-arrow-shape': 'triangle' },
+          },
+          {
+            selector: 'edge[kind = "relation"]',
+            style: { 'line-color': '#10b981', 'target-arrow-color': '#10b981', 'target-arrow-shape': 'none' },
+          },
+        ],
+      });
+
+      cy.nodeHtmlLabel([
+        {
+          query: 'node',
+          halign: 'center',
+          valign: 'center',
+          tpl: (data: Record<string, unknown>) => (data['labelHtml'] as string) ?? '',
+        },
+      ]);
+
+      function saveLayout() {
+        const client = lspClientRef.current;
+        const root = projectRootRef.current;
+        const cy = cyRef.current;
+        if (!client || !root || !cy) return;
+        const layout = buildLayout(
+          cy,
+          viewportsRef.current,
+          activeSchemaRef.current,
+          displayModeRef.current,
+        );
+        client.setLayout(root, layout).catch((_err: unknown) => {
+        });
+      }
+
+      const debouncedSaveLayout = debounce(saveLayout, 500);
+      cy.on('dragfreeon', debouncedSaveLayout);
+      cy.on('viewport', debounce(saveLayout, 750));
+      cy.on('layoutstop', saveLayout);
+
+      cy.on('tap', 'node, edge', (evt: CytoscapeInstance) => {
+        const data = evt.target.data();
+        onNodeSelectRef.current(data['qname'] as string);
+      });
+      cy.on('tap', (evt: CytoscapeInstance) => {
+        if (evt.target === cy) onNodeSelectRef.current(null);
+      });
+
+      cyRef.current = cy;
+      setCyReady(true);
     });
 
     return () => {
       if (cyRef.current) {
         cyRef.current.destroy();
+        cyRef.current = null;
       }
+      cyInitRef.current = false;
     };
   }, []);
 
   useEffect(() => {
     if (!cyRef.current) return;
+    const cy = cyRef.current;
 
-    cyRef.current.elements().remove();
-
-    const cyNodes = nodes.map((node, index) => ({
-      data: { id: `node-${index}`, label: node.label, kind: node.kind, qname: node.qname },
-    }));
-
-    cyRef.current.add(cyNodes);
-
-    if (nodes.length > 0) {
-      cyRef.current.layout({ name: 'circle', padding: 50 }).run();
+    if (graph === null) {
+      cy.elements().remove();
+      return;
     }
-  }, [nodes]);
+
+    const els = modelGraphToCyElements(graph, displayModeRef.current);
+    cy.elements().remove();
+    if (els.length > 0) {
+      cy.add(els);
+    }
+
+    const positions = nodePositionsRef.current;
+    const hasPositions = Object.keys(positions).length > 0;
+
+    if (hasPositions) {
+      applyPositions(cy, positions);
+    }
+
+    if (!hasPositions) {
+      cy.layout({
+        name: 'cose-bilkent',
+        randomize: false,
+        animate: false,
+        nodeRepulsion: 8000,
+        idealEdgeLength: 280,
+        edgeElasticity: 0.45,
+        gravity: 0.15,
+        padding: 30,
+      }).run();
+    }
+  }, [graph]);
+
+  useEffect(() => {
+    if (!cyRef.current || !graphRef.current) return;
+    const cy = cyRef.current;
+    const mode = displayModeRef.current;
+
+    const els = modelGraphToCyElements(graphRef.current, mode);
+    cy.nodes().forEach((node: CytoscapeInstance) => {
+      const qname = node.data('qname');
+      const el = els.find((e) => e.group === 'nodes' && e.data['qname'] === qname);
+      if (el) {
+        node.data('labelHtml', el.data['labelHtml']);
+      }
+    });
+    (cy as unknown as { nodeHtmlLabel: (opts: string) => void }).nodeHtmlLabel('update');
+  }, [displayMode]);
+
+  useEffect(() => {
+    const cy = cyRef.current;
+    const overlayEl = overlayRef.current;
+    if (!cy || !overlayEl) return;
+
+    function renderOverlay() {
+      const overlay = overlayEl;
+      if (!overlay) return;
+      const relationEdges = cy.edges('[kind = "relation"]');
+      const zoom = cy.zoom();
+
+      const svgParts: string[] = [];
+      for (const edge of relationEdges) {
+        const fromCard = edge.data('fromCardinality') as string | null;
+        const toCard = edge.data('toCardinality') as string | null;
+
+        const sEnd = edge.renderedSourceEndpoint() as { x: number; y: number };
+        const tEnd = edge.renderedTargetEndpoint() as { x: number; y: number };
+        const sx = sEnd.x;
+        const sy = sEnd.y;
+        const tx = tEnd.x;
+        const ty = tEnd.y;
+
+        const dx = tx - sx;
+        const dy = ty - sy;
+        const length = Math.sqrt(dx * dx + dy * dy);
+        if (length === 0) continue;
+
+        const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+
+        const fromGlyph = fromCard ? glyphFor(fromCard as Cardinality) : '';
+        const toGlyph = toCard ? glyphFor(toCard as Cardinality) : '';
+
+        if (fromGlyph) {
+          svgParts.push(
+            `<g transform="translate(${sx},${sy}) rotate(${angle}) scale(${zoom})">${fromGlyph}</g>`
+          );
+        }
+        if (toGlyph) {
+          svgParts.push(
+            `<g transform="translate(${tx},${ty}) rotate(${angle + 180}) scale(${zoom})">${toGlyph}</g>`
+          );
+        }
+      }
+
+      overlay.innerHTML = svgParts.length > 0
+        ? `<svg style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;overflow:visible">${svgParts.join('')}</svg>`
+        : '';
+    }
+
+    function scheduleRender() {
+      if (rafRef.current !== null) return;
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = null;
+        renderOverlay();
+      });
+    }
+
+    cy.on('render zoom pan', scheduleRender);
+    renderOverlay();
+
+    return () => {
+      cy.off('render zoom pan', scheduleRender);
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+    };
+  }, [cyReady]);
 
   return (
-    <div
-      ref={containerRef}
-      className="w-full h-full bg-white"
-      style={{ minHeight: '400px' }}
-    />
+    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+      <div
+        ref={containerRef}
+        className="w-full h-full bg-white"
+        style={{ minHeight: '400px' }}
+      />
+      <div
+        ref={overlayRef}
+        style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}
+      />
+    </div>
   );
 }

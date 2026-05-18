@@ -1,5 +1,6 @@
 export enum DiagnosticCode {
   ParseError = 'ttr/parse-error',
+  ParseRecoveryInfo = 'ttr/parse-recovery-info',
   UnknownProperty = 'ttr/unknown-property',
   UnresolvedReference = 'ttr/unresolved-reference',
   DuplicateDefinition = 'ttr/duplicate-definition',

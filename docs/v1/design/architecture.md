@@ -384,12 +384,45 @@ If a future feature wants live integration (e.g. "validate this model against th
 
 ## 10. Open questions (to revisit during implementation)
 
-1. **Exact CST trivia attachment policy.** ANTLR's hidden-token streams give us the raw material; the policy of "which trivia attaches to which node" affects edit fidelity. To be specified during Phase 0's parser package work with concrete fixtures.
-2. **Project root in multi-root VS Code workspaces.** v1 assumes one project per workspace folder. Multi-root workspaces (each folder its own project) should work but need an explicit test pass.
+1. **Exact CST trivia attachment policy.** ANTLR's hidden-token streams give us the raw material; the policy of "which trivia attaches to which node" affects edit fidelity. Specified during Phase 0 parser package work with concrete fixtures.
+2. **Project root in multi-root VS Code workspaces.** v1 assumes one project per workspace folder. Multi-root workspaces need an explicit test pass — deferred to v1.x.
 3. **TTR formatter rules.** Deferred to v1.2 with `format-document`. Rules to settle: where to break long property lists, how to reformat triple-string blocks, whether to enforce `:` or `=` as the property separator (or leave alone).
-4. **Bundled Node for IntelliJ.** Whether to ship a per-platform Node binary inside the plugin JAR (~30 MB per platform, 90 MB total) or detect a system Node and prompt to install if missing. Probably bundle for the v1 user experience; revisit if size becomes an issue.
-5. **Designer file-system access in browser.** File System Access API gives best UX but Safari support is limited; fallback to upload/download is ugly. May need to ship the Designer primarily as a VS Code webview (where file access is solved) and have the static site be a "demo mode."
-6. **Stock-vocabulary sync mechanism.** Currently described as "synced from ai-platform's BuiltinStockSource via a script." If ai-platform's stock-vocab format changes meaningfully, the sync script may need to evolve into a proper transform.
-7. **Edit synthesizer — handling of existing comments adjacent to insertions.** When inserting a new attribute into an entity, where does it go relative to existing trailing comments on the prior attribute? Needs a small fixture-driven decision pass.
+4. **Bundled Node for IntelliJ.** Deferred — v1 ships the IntelliJ plugin without bundled Node; users must have Node on PATH.
+5. **Designer file-system access in browser.** Resolved in Phase 3: uses File System Access API (Chromium) with a hidden `<input webkitdirectory>` fallback for Safari and non-supporting browsers.
+6. **Stock-vocabulary sync mechanism.** Resolved in Phase 2: stock vocabulary (`cnc.role.*`) is loaded via `loadStockVocabularies()` in the semantics layer; no external sync script needed in v1.
+7. **Edit synthesizer — handling of existing comments adjacent to insertions.** Deferred to v1.x — edit mode is not available in v1; `modeler/applyGraphEdit` returns `{ ok: false, reason: 'edit-mode-not-available-in-v1' }`.
 
 These don't block Phase 0; they get resolved as the relevant work lands.
+
+---
+
+## 11. Designer ↔ LSP Control Flow (Deployed Shape)
+
+In the GitHub Pages deployment, the Designer is a static React app served from `modeler/`. The LSP runs entirely inside the browser as a Web Worker (`@modeler/lsp/browser?worker`).
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Browser (GitHub Pages)                                    │
+│                                                             │
+│  ┌─────────────┐     LSP Worker (Web Worker)                │
+│  │ Designer    │ ←── postMessage ──→ │  @modeler/lsp        │
+│  │ React App   │                     │  server-browser.js   │
+│  └─────────────┘                    └──────────┬───────────┘
+│                                                │ parseString
+│                                                ▼
+│                                    ┌─────────────────────┐
+│                                    │  @modeler/parser     │
+│                                    └─────────────────────┘
+│                                                │
+│                                    ┌─────────────────────┐
+│                                    │  @modeler/semantics │
+│                                    └─────────────────────┘
+```
+
+Communication: the LSP Web Worker is instantiated by the Designer via `new Worker(new URL('@modeler/lsp/browser?worker', import.meta.url))`. The LSP protocol (initialize, textDocument/didOpen, etc.) runs over `postMessage`. Layout persistence is handled via `modeler/setLayout` / `modeler/getLayout` custom requests that store to / read from `.modeler/layout.ttrl` via an in-memory Map (the browser has no filesystem).
+
+Key behaviour:
+- **Schema toggle**: cached in `graphsBySchema`; only re-fetches from LSP when cache is null
+- **Layout persistence**: debounced saves on `dragfreeon` (500ms), `viewport` (750ms), `layoutstop` (immediate); restored on project open via `useLayoutSync`
+- **Selection → detail**: `selectedSymbol?.qname` drives a `useEffect` that calls `modeler/getSymbolDetail`; result displayed in `InspectorPanel`
+- **No edit mode in v1**: `modeler/applyGraphEdit` is a no-op placeholder

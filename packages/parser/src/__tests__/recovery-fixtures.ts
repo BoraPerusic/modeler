@@ -52,4 +52,20 @@ export const RECOVERY_FIXTURES: RecoveryFixture[] = [
     expectedRecoveredDefs: 1,
     expectErrors: true,
   },
+  {
+    name: 'def-entity-no-name',
+    input: `def entity {
+  description: "Test"
+}`,
+    description: 'def entity with no name — recovery strategy synthesizes',
+    expectedRecoveredDefs: 1,
+    expectErrors: true,
+  },
+  {
+    name: 'truncated-inline-column',
+    input: `def table T { columns: [ def column `,
+    description: 'truncated inline column — recovery strategy backs out',
+    expectedRecoveredDefs: 1,
+    expectErrors: true,
+  },
 ];

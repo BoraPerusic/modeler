@@ -121,5 +121,13 @@ describe('parser error recovery', () => {
       const defs = result.ast?.definitions ?? [];
       expect(defs.length).toBe(fixture.expectedRecoveredDefs);
     });
+
+    if (fixture.expectErrors) {
+      it(`"${fixture.name}": ${fixture.description} — produces at least one ttr/parse-recovery-info`, () => {
+        const result = parseString(fixture.input);
+        const hasRecoveryInfo = result.errors.some((e) => e.code === DiagnosticCode.ParseRecoveryInfo);
+        expect(hasRecoveryInfo, `"${fixture.name}" should have at least one ttr/parse-recovery-info`).toBe(true);
+      });
+    }
   }
 });

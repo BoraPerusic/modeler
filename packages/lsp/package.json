@@ -3,12 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "main": "./dist/server-stdio.js",
-  "types": "./dist/server-stdio.d.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "import": "./dist/server-stdio.js",
-      "types": "./dist/server-stdio.d.ts"
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
     },
     "./browser": {
       "import": "./dist/server-browser.js",
@@ -17,12 +17,17 @@
     "./server": {
       "import": "./dist/server.js",
       "types": "./dist/server.d.ts"
+    },
+    "./server-stdio": {
+      "types": "./dist/server-stdio.d.ts",
+      "import": "./dist/server-stdio.js",
+      "default": "./dist/server-stdio.js"
     }
   },
   "scripts": {
     "build": "tsc && pnpm run bundle-stdio && pnpm run bundle-browser",
-    "bundle-stdio": "esbuild src/server-stdio.ts --bundle --platform=node --format=esm --target=es2022 --outfile=dist/server-stdio.js --external:vscode-languageserver --external:vscode-languageserver-protocol --external:vscode-jsonrpc --external:antlr4ng",
-    "bundle-browser": "esbuild src/server-browser.ts --bundle --platform=browser --format=esm --target=es2022 --outfile=dist/server-browser.js --external:vscode-languageserver --external:vscode-languageserver-protocol --external:vscode-jsonrpc --external:fs --external:path --external:fuzzysort",
+    "bundle-stdio": "esbuild src/server-stdio.ts --bundle --platform=node --format=esm --target=es2022 --outfile=dist/server-stdio.js --external:vscode-languageserver --external:vscode-languageserver-protocol --external:vscode-jsonrpc --external:node:fs --external:node:path --external:antlr4ng --external:@modeler/parser --external:@modeler/semantics --external:@modeler/edit",
+    "bundle-browser": "esbuild src/server-browser.ts --bundle --platform=browser --format=esm --target=es2022 --outfile=dist/server-browser.js --external:node:fs --external:node:path --external:fs/promises --external:fs --external:path",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "lint": "eslint src"
@@ -31,6 +36,7 @@
     "@modeler/edit": "workspace:*",
     "@modeler/parser": "workspace:*",
     "@modeler/semantics": "workspace:*",
+    "ajv": "^8.20.0",
     "antlr4ng": "^3.0.0",
     "fuzzysort": "^3.1.0",
     "vscode-jsonrpc": "^8.2.0",

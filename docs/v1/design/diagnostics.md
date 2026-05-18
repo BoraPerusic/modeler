@@ -1,6 +1,6 @@
 # TTR Diagnostic Codes
 
-**Status:** v1 draft, 2026-05-14
+**Status:** v1.1, 2026-05-16
 
 This document lists every diagnostic code the TTR LSP can emit, organized by tier.
 
@@ -13,7 +13,8 @@ These diagnostics are produced by the parser layer (`@modeler/parser`) and propa
 | Code | Severity | Trigger | Fix |
 |------|----------|---------|-----|
 | `ttr/parse-error` | Error | ANTLR syntax error — missing token, unexpected token, malformed input | Correct the syntactic structure |
-| `ttr/unknown-property` | Error | Property name not recognized for the current `def <kind>` context (Phase 2 semantics work) | Use a valid property name; check for typos |
+| `ttr/parse-recovery-info` | Information | ANTLR error strategy recovered at a token — parser resynchronized and produced a partial AST | The input had a syntax error; recovery kept parsing to produce a usable result |
+| `ttr/unknown-property` | Error | Property name not recognized for the current `def <kind>` context | Use a valid property name; check for typos |
 
 ### `ttr/parse-error`
 
@@ -25,11 +26,29 @@ def entity foo {
 ```
 The opening `{` has no matching `}` on the same line. The parser's ANTLR error listener emits `ttr/parse-error` at end-of-file.
 
+### `ttr/parse-recovery-info`
+
+When ANTLR encounters a syntax error it cannot fix with single-token insertion/deletion, it enters recovery mode — consuming tokens until it finds one that allows parsing to resume. The parser's `RecoveryReportingStrategy` (a subclass of `DefaultErrorStrategy`) captures each recovery point and emits a `ttr/parse-recovery-info` diagnostic at `Information` severity.
+
+This diagnostic is always accompanied by at least one `ttr/parse-error` from the original syntax violation. The partial AST produced by the walk is still usable — recovery fixtures assert that recovered definitions are still populated.
+
+Example for `def entity {` (missing entity name):
+```
+def entity {
+  description: "Test"
+```
+ANTLR recovers by synthesizing a placeholder name; one `ttr/parse-error` (unexpected end of input) and one `ttr/parse-recovery-info` ("parser resumed after syntax error at '{'") are both emitted.
+
 ### `ttr/unknown-property`
 
-**Reserved for Phase 2.** Defined in `DiagnosticCode` but not yet emitted by any Phase 1 code path. The grammar accepts any identifier as a property key — semantic validation of property names against the allowed set for each `def <kind>` is Phase 2.D work. The code is reserved for that layer.
+Emitted when a property name is not recognized for the current `def <kind>` context.
 
----
+Example:
+```
+def entity foo {
+  descriptin: "Test"  # "descriptin" is not a valid entity property
+}
+```
 
 ## Core Tier (Phase 2)
 
@@ -117,7 +136,8 @@ The LSP maps parser codes to LSP severities as follows:
 | Parser code | LSP severity |
 |---|---|
 | `ttr/parse-error` | `Error` |
-| `ttr/unknown-property` | `Error` (Phase 2 — reserved, not yet emitted) |
+| `ttr/parse-recovery-info` | `Information` |
+| `ttr/unknown-property` | `Error` |
 | (Phase 2 codes) | |
 | `ttr/unresolved-reference` | `Warning` (configurable to `Error` via `[lint].strict`) |
 | `ttr/duplicate-definition` | `Error` |
