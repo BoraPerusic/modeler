@@ -110,6 +110,38 @@ describe('Phase 3 custom LSP methods', () => {
     }
   });
 
+  it('4.2b getLayout returns emptyLayout when .ttrl is malformed JSON', async () => {
+    const tempRoot = join(tmpdir(), `modeler-test-malformed-${Date.now()}`);
+    mkdirSync(join(tempRoot, '.modeler'), { recursive: true });
+    try {
+      writeFileSync(join(tempRoot, '.modeler', 'layout.ttrl'), 'not json {{{', 'utf-8');
+      const result = await client.sendRequest('modeler/getLayout', { projectRoot: tempRoot }) as {
+        version: number;
+        nodes: Record<string, unknown>;
+      };
+      expect(result.version).toBe(1);
+      expect(result.nodes).toEqual({});
+    } finally {
+      rmSync(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('4.2c getLayout returns emptyLayout when .ttrl has wrong schema version', async () => {
+    const tempRoot = join(tmpdir(), `modeler-test-wrongversion-${Date.now()}`);
+    mkdirSync(join(tempRoot, '.modeler'), { recursive: true });
+    try {
+      writeFileSync(join(tempRoot, '.modeler', 'layout.ttrl'), JSON.stringify({ version: 2, viewports: {}, nodes: {}, edges: {} }), 'utf-8');
+      const result = await client.sendRequest('modeler/getLayout', { projectRoot: tempRoot }) as {
+        version: number;
+        nodes: Record<string, unknown>;
+      };
+      expect(result.version).toBe(1);
+      expect(result.nodes).toEqual({});
+    } finally {
+      rmSync(tempRoot, { recursive: true, force: true });
+    }
+  });
+
   it('4.3 applyGraphEdit returns edit-mode-not-available-in-v1', async () => {
     const result = await client.sendRequest('modeler/applyGraphEdit', {
       operations: [{ op: 'add-node', node: {} }],
@@ -224,10 +256,31 @@ describe('Phase 3 custom LSP methods', () => {
     expect(artikl!.label).toBe('artikl');
   }, 10000);
 
+  it('4.7 parse-recovery-info diagnostics arrive with Information severity', async () => {
+    const received: lsp.Diagnostic[] = [];
+    client.onNotification('textDocument/publishDiagnostics', (params: lsp.PublishDiagnosticsParams) => {
+      received.push(...params.diagnostics);
+    });
+
+    client.sendNotification('textDocument/didOpen', {
+      textDocument: {
+        uri: 'file:///recovery-test.ttr',
+        languageId: 'ttr',
+        version: 1,
+        text: `def entity {
+  description: "Test"
+`,
+      },
+    });
+
+    await sleep(200);
+    const infoDiagnostics = received.filter(d =>
+      d.code === 'ttr/parse-recovery-info' && d.severity === 3
+    );
+    expect(infoDiagnostics.length, 'expected at least one parse-recovery-info with Information severity').toBeGreaterThanOrEqual(1);
+  }, 10000);
+
   it('4.6 getSymbolDetail for a column qname returns null in v1 (nested-qname limitation)', async () => {
-    // The Designer inspector only opens on top-level nodes in v1; nested
-    // qnames like db.dbo.QCENSKUP_DF.IDCENSKUP intentionally resolve to null.
-    // See findDefByQname in packages/lsp/src/model-graph.ts.
     const ttrFiles = await getAllTtrFiles(samplesDir, ['broken', 'v1-mini']);
     for (const file of ttrFiles) {
       const content = await import('fs/promises').then(fs => fs.readFile(file, 'utf-8'));

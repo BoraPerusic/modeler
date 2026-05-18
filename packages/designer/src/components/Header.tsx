@@ -9,14 +9,16 @@ interface HeaderProps {
   activeSchema: RenderableSchemaCode;
   displayMode: DisplayMode;
   projectUri: string | null;
+  transportKind: 'node' | 'browser' | null;
   onFileLoad: (files: ProjectFiles) => void;
   onSchemaChange: (schema: RenderableSchemaCode) => void;
   onDisplayModeChange: (mode: DisplayMode) => void;
   onToggleNlPane: () => void;
   onDirPick: () => void;
+  onDownloadLayout?: () => void;
 }
 
-export function Header({ activeSchema, displayMode, projectUri, onFileLoad, onSchemaChange, onDisplayModeChange, onToggleNlPane, onDirPick }: HeaderProps) {
+export function Header({ activeSchema, displayMode, projectUri, transportKind, onFileLoad, onSchemaChange, onDisplayModeChange, onToggleNlPane, onDirPick, onDownloadLayout }: HeaderProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const disabled = projectUri === null;
 
@@ -95,6 +97,15 @@ export function Header({ activeSchema, displayMode, projectUri, onFileLoad, onSc
         >
           Open Folder
         </button>
+        {transportKind === 'browser' && onDownloadLayout && (
+          <button
+            onClick={onDownloadLayout}
+            className="px-4 py-2 bg-slate-100 text-gray-700 border border-slate-300 rounded hover:bg-slate-200 transition-colors"
+            title="Download layout.ttrl (browser mode)"
+          >
+            Export Layout
+          </button>
+        )}
       </div>
     </header>
   );

@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import type { ModelGraph, DisplayMode, Cardinality } from '@modeler/lsp';
+import type { ModelGraph, DisplayMode, Cardinality, RenderableSchemaCode, ViewportState } from '@modeler/lsp';
+import type { LspClient } from '../lsp-client';
 import { modelGraphToCyElements } from '../cy/adapter';
 import { glyphFor } from '../cy/glyph-renderer';
+import { buildLayout, applyPositions } from '../cy/save-layout';
+import { debounce } from '../util/debounce';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type CytoscapeInstance = any;
@@ -27,31 +30,38 @@ const cytoscapeReadyPromise = Promise.all([
 interface CanvasProps {
   graph: ModelGraph | null;
   displayMode: DisplayMode;
-  onNodeSelect: (qname: string) => void;
+  activeSchema: RenderableSchemaCode;
+  viewports: Record<RenderableSchemaCode, ViewportState>;
+  nodePositions: Record<string, { x: number; y: number }>;
+  lspClient: LspClient | null;
+  projectRoot: string | null;
+  onNodeSelect: (qname: string | null) => void;
 }
 
-export function Canvas({ graph, displayMode, onNodeSelect }: CanvasProps) {
+export function Canvas({ graph, displayMode, activeSchema, viewports, nodePositions, lspClient, projectRoot, onNodeSelect }: CanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
   const cyRef = useRef<CytoscapeInstance | null>(null);
   const displayModeRef = useRef<DisplayMode>(displayMode);
   const graphRef = useRef<ModelGraph | null>(graph);
   const onNodeSelectRef = useRef(onNodeSelect);
+  const lspClientRef = useRef<LspClient | null>(null);
+  const projectRootRef = useRef<string | null>(null);
+  const nodePositionsRef = useRef(nodePositions);
+  const activeSchemaRef = useRef(activeSchema);
+  const viewportsRef = useRef(viewports);
   const cyInitRef = useRef(false);
   const rafRef = useRef<number | null>(null);
   const [cyReady, setCyReady] = useState(false);
 
-  useEffect(() => {
-    onNodeSelectRef.current = onNodeSelect;
-  }, [onNodeSelect]);
-
-  useEffect(() => {
-    displayModeRef.current = displayMode;
-  }, [displayMode]);
-
-  useEffect(() => {
-    graphRef.current = graph;
-  }, [graph]);
+  useEffect(() => { onNodeSelectRef.current = onNodeSelect; }, [onNodeSelect]);
+  useEffect(() => { displayModeRef.current = displayMode; }, [displayMode]);
+  useEffect(() => { graphRef.current = graph; }, [graph]);
+  useEffect(() => { lspClientRef.current = lspClient; }, [lspClient]);
+  useEffect(() => { projectRootRef.current = projectRoot; }, [projectRoot]);
+  useEffect(() => { nodePositionsRef.current = nodePositions; }, [nodePositions]);
+  useEffect(() => { activeSchemaRef.current = activeSchema; }, [activeSchema]);
+  useEffect(() => { viewportsRef.current = viewports; }, [viewports]);
 
   useEffect(() => {
     if (cyInitRef.current || !containerRef.current) return;
@@ -73,8 +83,6 @@ export function Canvas({ graph, displayMode, onNodeSelect }: CanvasProps) {
               'border-color': '#64748b',
               width: 220,
               height: 'data(h)',
-              // The HTML overlay (cytoscape-node-html-label) provides the visible content.
-              // We zero out cytoscape's own label so it doesn't render twice.
               'text-opacity': 0,
             },
           },
@@ -124,9 +132,32 @@ export function Canvas({ graph, displayMode, onNodeSelect }: CanvasProps) {
         },
       ]);
 
-      cy.on('tap', 'node', (evt: CytoscapeInstance) => {
+      function saveLayout() {
+        const client = lspClientRef.current;
+        const root = projectRootRef.current;
+        const cy = cyRef.current;
+        if (!client || !root || !cy) return;
+        const layout = buildLayout(
+          cy,
+          viewportsRef.current,
+          activeSchemaRef.current,
+          displayModeRef.current,
+        );
+        client.setLayout(root, layout).catch((_err: unknown) => {
+        });
+      }
+
+      const debouncedSaveLayout = debounce(saveLayout, 500);
+      cy.on('dragfreeon', debouncedSaveLayout);
+      cy.on('viewport', debounce(saveLayout, 750));
+      cy.on('layoutstop', saveLayout);
+
+      cy.on('tap', 'node, edge', (evt: CytoscapeInstance) => {
         const data = evt.target.data();
         onNodeSelectRef.current(data['qname'] as string);
+      });
+      cy.on('tap', (evt: CytoscapeInstance) => {
+        if (evt.target === cy) onNodeSelectRef.current(null);
       });
 
       cyRef.current = cy;
@@ -157,16 +188,25 @@ export function Canvas({ graph, displayMode, onNodeSelect }: CanvasProps) {
       cy.add(els);
     }
 
-    cy.layout({
-      name: 'cose-bilkent',
-      randomize: false,
-      animate: false,
-      nodeRepulsion: 8000,
-      idealEdgeLength: 280,
-      edgeElasticity: 0.45,
-      gravity: 0.15,
-      padding: 30,
-    }).run();
+    const positions = nodePositionsRef.current;
+    const hasPositions = Object.keys(positions).length > 0;
+
+    if (hasPositions) {
+      applyPositions(cy, positions);
+    }
+
+    if (!hasPositions) {
+      cy.layout({
+        name: 'cose-bilkent',
+        randomize: false,
+        animate: false,
+        nodeRepulsion: 8000,
+        idealEdgeLength: 280,
+        edgeElasticity: 0.45,
+        gravity: 0.15,
+        padding: 30,
+      }).run();
+    }
   }, [graph]);
 
   useEffect(() => {
@@ -201,9 +241,6 @@ export function Canvas({ graph, displayMode, onNodeSelect }: CanvasProps) {
         const fromCard = edge.data('fromCardinality') as string | null;
         const toCard = edge.data('toCardinality') as string | null;
 
-        // Screen-coordinate endpoints (already include pan + zoom). The glyph's
-        // internal length is in model-pixels, so the outer transform applies
-        // `scale(zoom)` to keep the rendered size proportional to the graph.
         const sEnd = edge.renderedSourceEndpoint() as { x: number; y: number };
         const tEnd = edge.renderedTargetEndpoint() as { x: number; y: number };
         const sx = sEnd.x;
@@ -216,20 +253,17 @@ export function Canvas({ graph, displayMode, onNodeSelect }: CanvasProps) {
         const length = Math.sqrt(dx * dx + dy * dy);
         if (length === 0) continue;
 
-        // Edge direction (source → target) in degrees.
         const angle = Math.atan2(dy, dx) * (180 / Math.PI);
 
         const fromGlyph = fromCard ? glyphFor(fromCard as Cardinality) : '';
         const toGlyph = toCard ? glyphFor(toCard as Cardinality) : '';
 
         if (fromGlyph) {
-          // At the source endpoint, outward = toward target, so local +x = edge direction.
           svgParts.push(
             `<g transform="translate(${sx},${sy}) rotate(${angle}) scale(${zoom})">${fromGlyph}</g>`
           );
         }
         if (toGlyph) {
-          // At the target endpoint, outward = back toward source, so local +x = -edge direction.
           svgParts.push(
             `<g transform="translate(${tx},${ty}) rotate(${angle + 180}) scale(${zoom})">${toGlyph}</g>`
           );

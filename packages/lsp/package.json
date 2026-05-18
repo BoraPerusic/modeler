@@ -19,8 +19,9 @@
       "types": "./dist/server.d.ts"
     },
     "./server-stdio": {
+      "types": "./dist/server-stdio.d.ts",
       "import": "./dist/server-stdio.js",
-      "types": "./dist/server-stdio.d.ts"
+      "default": "./dist/server-stdio.js"
     }
   },
   "scripts": {

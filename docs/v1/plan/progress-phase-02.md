@@ -89,10 +89,10 @@
 - [x] Integration test asserts the first token's length equals the entity name's length
 
 ## Section L — `parse-recovery-info` emission
-- [ ] Deferred again — see review-003 §F and review-004 §1. ANTLR's `DefaultErrorStrategy` already produces partial ASTs; the structured "what was assumed" diagnostic is not a Phase-2 user-visible blocker. Revisit in Phase 3 if real users ask for it.
+- [x] Completed in Phase 3.I (2026-05-16). `RecoveryReportingStrategy` subclass of `DefaultErrorStrategy` overrides `recover` and `recoverInline`; after parsing, its `recoveryEvents` are converted to `ParseError` entries with code `ttr/parse-recovery-info` and severity `info`. Recovery-fixtures tests now assert `ttr/parse-recovery-info` presence on all recoverable inputs.
 
 ## Section M — VS Code smoke test
-- [ ] Deferred — see review-004 Task 5 Option B. The placeholder `smoke.test.ts` from review-003 was removed (the `expect(literal).toBe(literal)` pattern). A real `@vscode/test-electron` smoke test is non-trivial in CI (needs xvfb) and is moved to Phase 3 alongside the Designer feature work that will exercise it.
+- [x] Completed in Phase 3.J (2026-05-17). `@vscode/test-electron` harness in `packages/vscode-ext/src/test/`, smoke tests TC1–TC5, `test:smoke` script, `vscode-smoke` CI job added.
 
 ## Section N — Documentation + progress
 - [x] `docs/design/diagnostics.md` covers all Phase-2 codes
@@ -100,15 +100,15 @@
 - [ ] `packages/semantics/README.md` — write when Phase 3 starts touching it
 - [ ] `packages/lsp/README.md` v2 surface — write when Phase 3 starts touching it
 
-## Test Results (2026-05-15)
+## Test Results (2026-05-16)
 ```
 pnpm -r build:      ✅
 pnpm -r test:       ✅
-  packages/parser:     19 tests
-  packages/semantics:  40 tests (3 manifest + 11 qname + 6 resolver + 13 symbol-table + 7 validator)
+  packages/parser:     24 tests (Phase 3.I: added 5 ttr/parse-recovery-info assertions)
+  packages/semantics:  48 tests
   packages/lsp:         4 tests
   packages/vscode-ext:  6 tests (generator)
-  tests/integration:   15 tests (3 parser + 2 lsp Phase-0/1 + 10 Phase-2 LSP features)
+  tests/integration:   28 tests
 pnpm -r lint:       ✅
 pnpm -r typecheck:  ✅
 ```
@@ -122,8 +122,8 @@ pnpm -r typecheck:  ✅
 ## Deferred to later phases
 | Item | Target |
 |------|--------|
-| `parse-recovery-info` emission (DefaultErrorStrategy subclass) | Phase 3 if needed |
-| VS Code `@vscode/test-electron` smoke test | Phase 3 |
-| `packages/semantics/README.md` | Phase 3 first commit |
-| `packages/lsp/README.md` v2 surface doc | Phase 3 first commit |
-| Indexing relations/queries/roles/er2db_* as separate symbol-table entries | Phase 3 if navigation needs it |
+| `parse-recovery-info` emission (DefaultErrorStrategy subclass) | Completed in Phase 3.I (2026-05-16) |
+| VS Code `@vscode/test-electron` smoke test | Completed in Phase 3.J (2026-05-17) |
+| `packages/semantics/README.md` | Completed in Phase 3.K (2026-05-17) |
+| `packages/lsp/README.md` v2 surface doc | Completed in Phase 3.K (2026-05-17) |
+| Indexing relations/queries/roles/er2db_* as separate symbol-table entries | Completed in Phase 3.H (2026-05-16) |

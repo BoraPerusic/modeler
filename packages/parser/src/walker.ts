@@ -98,6 +98,7 @@ import type {
   Er2cncRoleDef,
 } from './ast.js';
 import { DiagnosticCode } from './diagnostics.js';
+import { RecoveryReportingStrategy } from './recovery.js';
 
 class DiagnosticErrorListener implements ANTLRErrorListener {
   private errors: ParseError[];
@@ -155,9 +156,28 @@ export function parseString(content: string, fileLabel = '<string>'): ParseResul
   lexer.addErrorListener(lexerErrorListener);
   parser.addErrorListener(parserErrorListener);
 
+  const recoveryStrategy = new RecoveryReportingStrategy();
+  parser.errorHandler = recoveryStrategy;
+
   try {
     const tree = parser.document();
     const doc = walkDocument(tree, fileLabel);
+    for (const event of recoveryStrategy.recoveryEvents) {
+      errors.push({
+        code: DiagnosticCode.ParseRecoveryInfo,
+        message: event.description,
+        severity: 'info',
+        source: {
+          file: fileLabel,
+          line: event.line,
+          column: event.column,
+          endLine: event.line,
+          endColumn: event.column + (event.offsetEnd - event.offsetStart),
+          offsetStart: event.offsetStart,
+          offsetEnd: event.offsetEnd,
+        },
+      });
+    }
     return { ast: doc, errors, sourceFile: fileLabel };
   } catch (e) {
     return {

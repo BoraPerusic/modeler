@@ -12,11 +12,13 @@ describe('Header', () => {
         activeSchema="db"
         displayMode="just-names"
         projectUri={null}
+        transportKind={null}
         onFileLoad={vi.fn()}
         onSchemaChange={vi.fn()}
         onDisplayModeChange={vi.fn()}
         onToggleNlPane={vi.fn()}
         onDirPick={vi.fn()}
+        onDownloadLayout={undefined}
       />
     );
     expect(screen.getByRole('button', { name: 'db' })).toBeDisabled();
@@ -29,11 +31,13 @@ describe('Header', () => {
         activeSchema="db"
         displayMode="just-names"
         projectUri="file:///x"
+        transportKind={null}
         onFileLoad={vi.fn()}
         onSchemaChange={vi.fn()}
         onDisplayModeChange={vi.fn()}
         onToggleNlPane={vi.fn()}
         onDirPick={vi.fn()}
+        onDownloadLayout={undefined}
       />
     );
     expect(screen.getByRole('button', { name: 'db' })).not.toBeDisabled();
@@ -47,11 +51,13 @@ describe('Header', () => {
         activeSchema="db"
         displayMode="just-names"
         projectUri="file:///x"
+        transportKind={null}
         onFileLoad={vi.fn()}
         onSchemaChange={onSchemaChange}
         onDisplayModeChange={vi.fn()}
         onToggleNlPane={vi.fn()}
         onDirPick={vi.fn()}
+        onDownloadLayout={undefined}
       />
     );
     fireEvent.click(screen.getByRole('button', { name: 'er' }));
@@ -64,11 +70,13 @@ describe('Header', () => {
         activeSchema="db"
         displayMode="with-constraints"
         projectUri="file:///x"
+        transportKind={null}
         onFileLoad={vi.fn()}
         onSchemaChange={vi.fn()}
         onDisplayModeChange={vi.fn()}
         onToggleNlPane={vi.fn()}
         onDirPick={vi.fn()}
+        onDownloadLayout={undefined}
       />
     );
     expect(screen.getByRole('button', { name: 'with constraints' })).toHaveClass('text-sky-500');
@@ -82,11 +90,13 @@ describe('Header', () => {
         activeSchema="db"
         displayMode="just-names"
         projectUri={null}
+        transportKind={null}
         onFileLoad={vi.fn()}
         onSchemaChange={vi.fn()}
         onDisplayModeChange={vi.fn()}
         onToggleNlPane={vi.fn()}
         onDirPick={vi.fn()}
+        onDownloadLayout={undefined}
       />
     );
     expect(screen.getByText(/read-only/i)).toBeInTheDocument();
@@ -97,11 +107,13 @@ describe('Header', () => {
         activeSchema="db"
         displayMode="just-names"
         projectUri="file:///x"
+        transportKind={null}
         onFileLoad={vi.fn()}
         onSchemaChange={vi.fn()}
         onDisplayModeChange={vi.fn()}
         onToggleNlPane={vi.fn()}
         onDirPick={vi.fn()}
+        onDownloadLayout={undefined}
       />
     );
     expect(screen.getByText(/read-only/i)).toBeInTheDocument();
@@ -114,11 +126,13 @@ describe('Header', () => {
         activeSchema="db"
         displayMode="just-names"
         projectUri="file:///x"
+        transportKind={null}
         onFileLoad={vi.fn()}
         onSchemaChange={vi.fn()}
         onDisplayModeChange={vi.fn()}
         onToggleNlPane={onToggleNlPane}
         onDirPick={vi.fn()}
+        onDownloadLayout={undefined}
       />
     );
     fireEvent.click(screen.getByRole('button', { name: /nl/i }));
@@ -131,11 +145,13 @@ describe('Header', () => {
         activeSchema="db"
         displayMode="just-names"
         projectUri="file:///x"
+        transportKind={null}
         onFileLoad={vi.fn()}
         onSchemaChange={vi.fn()}
         onDisplayModeChange={vi.fn()}
         onToggleNlPane={vi.fn()}
         onDirPick={vi.fn()}
+        onDownloadLayout={undefined}
       />
     );
     const fileInput = screen.getByRole('button', { name: 'Load Project Folder' }).previousSibling as HTMLInputElement;

@@ -1,121 +1,81 @@
 # Tatrman Modeler
 
-This folder contains the support for the Tatrman modeling language, TTR.
+Editor-side tooling for the **TTR** modeling language: a VS Code extension, a static React graphical designer, and a shared TypeScript LSP server. All consumers share one parser, one semantic engine, and one LSP — the runtime side of TTR is consumed by `ai-platform` (separate repo); this repo is editor tooling only.
 
-We start with the grammar in `packages/grammar/src/TTR.g4`, and samples in the `samples` directory.
+The grammar lives in `packages/grammar/src/TTR.g4`. Sample projects are under `samples/`.
 
-## Goal
+## What ships in v1
 
-The goal is to develop the support for this language. We want the following:
-- support for the language as a VS Code plugin
-- support for the language as an IntelliJ Idea (or in general JetBrain's IDEs) plugin
-- graphical designer
+- **VS Code extension** — `.ttr` syntax highlighting, diagnostics, hover, go-to-definition, find-references, workspace symbol search.
+- **Graphical Designer** — read-only React + Cytoscape.js renderer for `db` and `er` schemas. Display-mode toggle (just-names / with-types / with-constraints), schema toggle (db ↔ er), inspector panel with symbol details and reference navigation, layout persistence (node positions + per-schema viewport + display mode round-trip through `.modeler/layout.ttrl`). Deployed via GitHub Pages; `?demo=v1-metadata` query loads the sample project without an upload.
+- **Tatrman LSP** — single TypeScript server, two transports: stdio for VS Code / IntelliJ, Web Worker for the Designer. Custom `modeler/*` methods documented in [packages/lsp/README.md](packages/lsp/README.md).
 
-## Graphical Designer
-
-Graphical designer should be based on the Ontology Playground project (see `~/Dev/view-only/ontology-playground`). We will update it as follows:
-Reuse:
-- the graphical canvas with objects and relationships, with its full functionality
-- the right hand side panel for details
-- the "Designer" mode
-- the overall look and feel
-- the tech stack
-- the top menu bar
-- the "natural language" pane
-
-Get rid of
-- the Quests and gamification
-- the Ontology School
-
-Updates
-- different display "schemas" - for physical model, for E-R, for (coming) conceptual model; inlcuding, for example, different views of E-R schema (Chen, Crow's foot, UML)
-- toggle to display details in the objects - columns (or attributes) inside the graph, and the level of detail (just columns, columns + types, incl. constrains and indices, ...)
-
-Designer
-- designer will produce updated TTR files
-
-## Language Plugins
-
-Standard language properties
-- syntax highlighting
-- reference checks for "variables" (objects in our case)
-- suggestions
-
-## Priority
-
-1. VS Code
-2. Graphical Designer
-3. IntelliJ
+Edit mode (round-tripping graph edits back into `.ttr` text) lands in v1.1; `modeler/applyGraphEdit` is a stub returning `{ ok: false }` in v1.
 
 ## Architecture
 
-See [docs/design/architecture.md](docs/design/architecture.md) for the full architecture and design decisions.
+See [docs/design/architecture.md](docs/design/architecture.md) for the full design and decision log, plus the Designer ↔ LSP control-flow diagram for the deployed (browser) topology.
 
-## Implementation Plan
+## Phase status
 
-See [docs/plan/implementation-plan.md](docs/plan/implementation-plan.md) for the phased implementation plan.
+**Phase 3 — complete.** All sections A–K shipped. See [docs/plan/progress-phase-03.md](docs/plan/progress-phase-03.md) for the per-section progress log and [docs/plan/tasks-phase-03-designer.md](docs/plan/tasks-phase-03-designer.md) for the original task plan.
 
-## Developing Locally
+| Section | Scope |
+|---|---|
+| A | Designer scaffold cleanup |
+| B | LSP custom-method integration |
+| C | `db` schema rendering |
+| D | `er` schema rendering with cardinality glyphs |
+| E | Inspector panel |
+| F | Layout persistence (positions, viewport, display mode) |
+| G | Static GitHub Pages deploy |
+| H | Symbol indexing for `relation` / `query` / `role` / `er2db*` kinds |
+| I | `ttr/parse-recovery-info` diagnostic |
+| J | `@vscode/test-electron` smoke tests (TC1–TC5) |
+| K | Documentation pass |
+
+## Developing locally
 
 ### Prerequisites
 
 - Node.js 20+
-- pnpm 9+
+- pnpm 11+ (the repo pins `pnpm@11.1.1` via `packageManager`; Corepack picks it up automatically)
 
 ### Setup
 
 ```bash
-# Install dependencies
 pnpm install
-
-# Build all packages
-pnpm -r build
-
-# Run tests
-pnpm -r test
-
-# Lint all packages
+pnpm -r build      # builds all packages
+pnpm -r test       # 226 vitest cases across packages + integration
 pnpm -r lint
+pnpm -r typecheck
 ```
 
-### Key Commands
-
-| Command | Description |
-|---------|-------------|
-| `pnpm install` | Install all dependencies |
-| `pnpm -r build` | Build all packages |
-| `pnpm -r test` | Run all tests |
-| `pnpm -r lint` | Lint all packages |
-
-### Package Structure
-
-| Package | Purpose |
-|---------|---------|
-| `@modeler/grammar` | TTR.g4 grammar and sync scripts |
-| `@modeler/parser` | TypeScript parser generated from grammar |
-| `@modeler/semantics` | Symbol table, resolver, validator (Phase 2) |
-| `@modeler/edit` | WorkspaceEdit synthesizer (v1.1) |
-| `@modeler/lsp` | LSP server (stdio and browser transports) |
-| `@modeler/vscode-ext` | VS Code extension |
-| `@modeler/designer` | React-based graphical designer |
-
-### Testing the VS Code Extension
-
-1. Open `packages/vscode-ext` in VS Code
-2. Press F5 to launch Extension Development Host
-3. Open any `.ttr` file to test syntax highlighting and LSP diagnostics
-
-### Testing the Designer
+### Per-package commands
 
 ```bash
-cd packages/designer
-pnpm run dev
+pnpm --filter @modeler/designer dev          # Vite dev server on http://localhost:5173
+pnpm --filter @modeler/vscode-ext test:smoke # boots VS Code, runs 5 smoke cases
+pnpm --filter @modeler/integration-tests test
 ```
 
-Opens on http://localhost:5173
+For the VS Code extension dev cycle, open `packages/vscode-ext` in VS Code and press F5 — the Extension Development Host opens; load any `.ttr` from `samples/` to exercise syntax highlighting, diagnostics, and navigation.
+
+### Package structure
+
+| Package | Purpose |
+|---|---|
+| [`@modeler/grammar`](packages/grammar) | `TTR.g4` grammar and the ANTLR / TextMate generation scripts; no runtime logic |
+| [`@modeler/parser`](packages/parser/README.md) | `parseString` / `parseFile` returning `{ ast, errors }`; recovery strategy emits `ttr/parse-recovery-info` |
+| [`@modeler/semantics`](packages/semantics/README.md) | Symbol table, resolver, validator, reference index — browser-safe core plus a Node-only subpath for disk I/O |
+| [`@modeler/lsp`](packages/lsp/README.md) | LSP server (stdio + browser worker), Phase-3 custom `modeler/*` methods |
+| [`@modeler/vscode-ext`](packages/vscode-ext/README.md) | VS Code extension — thin shim, all language logic lives in the LSP |
+| [`@modeler/designer`](packages/designer/README.md) | React + Cytoscape.js Designer; deployed via GitHub Pages |
 
 ## Documentation
 
 - [docs/design/architecture.md](docs/design/architecture.md) — Architecture and design decisions
+- [docs/design/diagnostics.md](docs/design/diagnostics.md) — Diagnostic codes, severities, examples
+- [docs/design/phase-03-contracts.md](docs/design/phase-03-contracts.md) — Phase-3 LSP custom-method contracts
 - [docs/plan/implementation-plan.md](docs/plan/implementation-plan.md) — Phased implementation plan
-- [docs/plan/progress-phase-00.md](docs/plan/progress-phase-00.md) — Phase 0 progress tracking
+- [docs/plan/progress-phase-03.md](docs/plan/progress-phase-03.md) — Phase 3 progress log

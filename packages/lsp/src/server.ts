@@ -187,7 +187,7 @@ export function createServerConnection(
     const diagnostics: Diagnostic[] = result.errors.map((err: ParseError) => ({
       range: sourceLocationToRange(err.source),
       message: err.message,
-      severity: err.severity === 'warning' ? DiagnosticSeverity.Warning : DiagnosticSeverity.Error,
+      severity: severityToLsp(err.severity),
       code: err.code,
       source: 'modeler',
     }));
@@ -205,19 +205,19 @@ export function createServerConnection(
   }
 
   function toLspDiagnostic(d: ValidationDiagnostic): Diagnostic {
-    const severity =
-      d.severity === 'warning'
-        ? DiagnosticSeverity.Warning
-        : d.severity === 'info'
-        ? DiagnosticSeverity.Information
-        : DiagnosticSeverity.Error;
     return {
       range: sourceLocationToRange(d.source),
       message: d.message,
-      severity,
+      severity: severityToLsp(d.severity),
       code: d.code,
       source: 'modeler',
     };
+  }
+
+  function severityToLsp(s: 'error' | 'warning' | 'info'): DiagnosticSeverity {
+    return s === 'warning' ? DiagnosticSeverity.Warning
+      : s === 'info' ? DiagnosticSeverity.Information
+      : DiagnosticSeverity.Error;
   }
 
   function updateSymbolTable(uri: string, content: string): void {
@@ -368,9 +368,20 @@ export function createServerConnection(
     return { ok: true };
   });
 
-  connection.onRequest('modeler/exportLayout', (_params: { projectRoot: string }): LayoutFile => {
+  connection.onRequest('modeler/exportLayout', async (_params: { projectRoot: string }): Promise<LayoutFile> => {
     if (opts.layoutStore) {
       return opts.layoutStore.get(_params.projectRoot) ?? emptyLayout();
+    }
+    const { readFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const layoutPath = join(_params.projectRoot, '.modeler', 'layout.ttrl');
+    try {
+      const raw = readFileSync(layoutPath, 'utf-8');
+      const parsed = JSON.parse(raw);
+      const validated = validateLayout(parsed);
+      if (validated) return validated;
+    } catch {
+      // fall through to emptyLayout
     }
     return emptyLayout();
   });
@@ -384,6 +395,15 @@ export function createServerConnection(
       const doc = documents.get(uri);
       return doc ? doc.getText() : null;
     }, (content, uri) => parseString(content, uri));
+  });
+
+  connection.onRequest('modeler/listSymbols', (params: { kinds?: string[]; limit?: number }) => {
+    const limit = params.limit ?? 500;
+    const allowed = params.kinds ? new Set(params.kinds) : null;
+    return projectSymbols.all()
+      .filter((s) => !allowed || allowed.has(s.kind))
+      .slice(0, limit)
+      .map((s) => ({ qname: s.qname, kind: s.kind, name: s.name }));
   });
 
   connection.onDefinition((params) => {

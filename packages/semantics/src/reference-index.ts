@@ -3,7 +3,12 @@ import { collectAllReferences } from './references.js';
 import type { Resolver } from './resolver.js';
 
 function enclosingQnameOf(def: Definition, schemaCode: string, namespace: string): string | undefined {
-  if (def.kind === 'entity' || def.kind === 'table' || def.kind === 'view' || def.kind === 'procedure') {
+  if (
+    def.kind === 'entity' || def.kind === 'table' || def.kind === 'view' || def.kind === 'procedure' ||
+    def.kind === 'relation' || def.kind === 'query' || def.kind === 'role' ||
+    def.kind === 'er2dbEntity' || def.kind === 'er2dbAttribute' ||
+    def.kind === 'er2dbRelation' || def.kind === 'er2cncRole'
+  ) {
     return [schemaCode, namespace, def.name].filter((s) => s !== '').join('.');
   }
   return undefined;
@@ -14,6 +19,8 @@ export interface ReferenceLocation {
   source: SourceLocation;
   /** The canonical qname this reference resolved to. */
   targetQname: string;
+  /** The qname of the def that contains the reference (null when the ref is not inside a def). */
+  referrerQname: string | null;
 }
 
 /**
@@ -35,16 +42,17 @@ export class ReferenceIndex {
     const locations: ReferenceLocation[] = [];
 
     for (const { ref, ownerDef } of collectAllReferences(ast)) {
-      const enclosingQname = enclosingQnameOf(ownerDef, schemaCode, namespace);
+      const referrerQname = enclosingQnameOf(ownerDef, schemaCode, namespace) ?? null;
       const res = resolver.resolveReference(
         { path: ref.path, parts: ref.parts },
-        { schemaCode, namespace, enclosingQname }
+        { schemaCode, namespace, enclosingQname: referrerQname ?? undefined }
       );
       if (!res.resolved) continue;
       const loc: ReferenceLocation = {
         documentUri: uri,
         source: ref.source,
         targetQname: res.symbol.qname,
+        referrerQname,
       };
       locations.push(loc);
       const list = this.byTargetQname.get(res.symbol.qname) ?? [];

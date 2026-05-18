@@ -2,8 +2,15 @@ import * as vscode from 'vscode';
 import { LanguageClient, TransportKind, NodeModule } from 'vscode-languageclient';
 
 export function activate(context: vscode.ExtensionContext) {
+  // Resolve the LSP server bundle from @modeler/lsp's workspace location.
+  // The bundle externalizes @modeler/parser, @modeler/semantics, @modeler/edit
+  // (see packages/lsp/package.json's `bundle-stdio` script), so it must be
+  // launched from a directory where Node's module resolution can find those
+  // workspace deps — i.e. node_modules/@modeler/lsp/dist/, not a copy.
+  const serverPath = require.resolve('@modeler/lsp/server-stdio');
+
   const serverModule: NodeModule = {
-    module: vscode.Uri.joinPath(context.extensionUri, 'dist', 'server-stdio.js').fsPath,
+    module: serverPath,
     transport: TransportKind.stdio,
   };
 

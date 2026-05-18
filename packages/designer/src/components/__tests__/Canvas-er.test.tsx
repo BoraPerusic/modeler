@@ -53,6 +53,11 @@ vi.mock('../cy/adapter', () => ({
   modelGraphToCyElements: mockModelGraphToCyElements,
 }));
 
+const defaultViewports = {
+  db: { zoom: 1, panX: 0, panY: 0, displayMode: 'with-types' as const },
+  er: { zoom: 1, panX: 0, panY: 0, displayMode: 'just-names' as const },
+};
+
 describe('Canvas (er schema)', () => {
   beforeEach(() => {
     for (const key of Object.keys(handlers)) delete handlers[key];
@@ -65,12 +70,12 @@ describe('Canvas (er schema)', () => {
   });
 
   it('renders a container div with relative positioning', () => {
-    render(<Canvas graph={null} displayMode="just-names" onNodeSelect={vi.fn()} />);
+    render(<Canvas graph={null} displayMode="just-names" activeSchema="er" viewports={defaultViewports} nodePositions={{}} lspClient={null} projectRoot={null} onNodeSelect={vi.fn()} />);
     expect(document.querySelector('[style*="position: relative"]')).toBeInTheDocument();
   });
 
   it('registers a render/zoom/pan handler once cy is ready', async () => {
-    render(<Canvas graph={null} displayMode="just-names" onNodeSelect={vi.fn()} />);
+    render(<Canvas graph={null} displayMode="just-names" activeSchema="er" viewports={defaultViewports} nodePositions={{}} lspClient={null} projectRoot={null} onNodeSelect={vi.fn()} />);
     await waitFor(() => {
       expect(handlers['render zoom pan']).toBeDefined();
       expect(handlers['render zoom pan'].length).toBeGreaterThan(0);
@@ -80,7 +85,7 @@ describe('Canvas (er schema)', () => {
   it('calls glyphFor with each edge cardinalities when the render handler fires', () => {
     act(() => {
       vi.useFakeTimers();
-      render(<Canvas graph={null} displayMode="just-names" onNodeSelect={vi.fn()} />);
+      render(<Canvas graph={null} displayMode="just-names" activeSchema="er" viewports={defaultViewports} nodePositions={{}} lspClient={null} projectRoot={null} onNodeSelect={vi.fn()} />);
     });
     act(() => {
       vi.runAllTimers();

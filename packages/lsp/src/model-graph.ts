@@ -196,6 +196,11 @@ export type PerKindData =
   | { kind: 'fk'; fromQname: string; toQname: string }
   | { kind: 'relation'; fromQname: string; toQname: string; fromCardinality: Cardinality | null; toCardinality: Cardinality | null }
   | { kind: 'role'; labelByLanguage: Record<string, string> }
+  | { kind: 'query' }
+  | { kind: 'er2dbEntity'; entityQname: string; targetDescription: string }
+  | { kind: 'er2dbAttribute'; attributeQname: string; targetDescription: string }
+  | { kind: 'er2dbRelation'; relationQname: string; fkQname: string }
+  | { kind: 'er2cncRole'; entityQname: string; roleQname: string }
   | { kind: 'other' };
 
 export interface SymbolDetail {
@@ -316,13 +321,48 @@ function buildSymbolDetailForDef(
       Object.assign(labelByLanguage, role.label.entries);
     }
     perKindData = { kind: 'role', labelByLanguage };
+  } else if (def.kind === 'query') {
+    perKindData = { kind: 'query' };
+  } else if (def.kind === 'er2dbEntity') {
+    const e2 = def as { entity?: { path: string }; target?: { table?: string; sqlQuery?: string } };
+    const entityRef = e2.entity?.path ?? '';
+    const targetDesc = e2.target
+      ? (e2.target.table ? `table:${e2.target.table}` : e2.target.sqlQuery ? `sqlQuery:${e2.target.sqlQuery}` : '')
+      : '';
+    perKindData = { kind: 'er2dbEntity', entityQname: entityRef, targetDescription: targetDesc };
+  } else if (def.kind === 'er2dbAttribute') {
+    const e2a = def as { attribute?: { path: string }; target?: { table?: string; sqlQuery?: string } };
+    const attrRef = e2a.attribute?.path ?? '';
+    const targetDesc = e2a.target
+      ? (e2a.target.table ? `table:${e2a.target.table}` : e2a.target.sqlQuery ? `sqlQuery:${e2a.target.sqlQuery}` : '')
+      : '';
+    perKindData = { kind: 'er2dbAttribute', attributeQname: attrRef, targetDescription: targetDesc };
+  } else if (def.kind === 'er2dbRelation') {
+    const e2r = def as { relation?: { path: string }; fk?: { path: string } };
+    perKindData = {
+      kind: 'er2dbRelation',
+      relationQname: e2r.relation?.path ?? '',
+      fkQname: e2r.fk?.path ?? '',
+    };
+  } else if (def.kind === 'er2cncRole') {
+    const e2c = def as { entity?: { path: string }; role?: { path: string } };
+    perKindData = {
+      kind: 'er2cncRole',
+      entityQname: e2c.entity?.path ?? '',
+      roleQname: e2c.role?.path ?? '',
+    };
   }
 
+  const seen = new Set<string>();
   const referencedBy = refIndex.findByQname(qname).map(loc => ({
-    qname: loc.targetQname,
+    qname: loc.referrerQname ?? loc.targetQname,
     sourceUri: loc.documentUri,
     sourceLine: loc.source.line,
-  }));
+  })).filter(loc => {
+    if (seen.has(loc.qname)) return false;
+    seen.add(loc.qname);
+    return true;
+  });
 
   return {
     qname,
@@ -353,8 +393,9 @@ export function buildSymbolDetail(
   const realDef = findDefByQname(symbol.documentUri, qname, getDocument, parseDocument);
   if (!realDef) return null;
 
-  const schemaCode = qname.split('.')[0] ?? 'db';
-  const namespace = qname.split('.')[1] ?? '';
+  const parts = qname.split('.');
+  const schemaCode = parts[0] ?? 'db';
+  const namespace = parts.length === 2 ? '' : (parts[1] ?? '');
   return buildSymbolDetailForDef(
     realDef,
     schemaCode,
@@ -384,10 +425,10 @@ function findDefByQname(
   if (!result.ast) return null;
   const parts = qname.split('.');
   const schemaCode = parts[0] ?? 'db';
-  const namespace = parts[1] ?? '';
-  const name = parts.slice(2).join('.');
+  const namespace = parts.length === 2 ? '' : (parts[1] ?? '');
+  const name = parts.length === 2 ? parts[1] : parts.slice(2).join('.');
   for (const def of result.ast.definitions) {
-    if (def.name === name && def.kind !== 'fk' && def.kind !== 'relation') {
+    if (def.name === name && def.kind !== 'fk') {
       const defSchema = result.ast.schemaDirective?.schemaCode ?? 'db';
       const defNamespace = result.ast.schemaDirective?.namespace ?? '';
       if (defSchema === schemaCode && defNamespace === namespace) return def;

@@ -14,6 +14,7 @@ import type { ModelGraph, LayoutFile, SymbolDetail, RenderableSchemaCode } from 
 import LspWorker from '@modeler/lsp/browser?worker';
 
 export interface LspClient {
+  transportKind: 'node' | 'browser';
   openDocument(uri: string, content: string): Promise<void>;
   getModelGraph(uri: string, schema: RenderableSchemaCode): Promise<ModelGraph>;
   getLayout(projectRoot: string): Promise<LayoutFile>;
@@ -42,6 +43,7 @@ export async function createLspClient(): Promise<LspClient> {
     for (const h of diagnosticHandlers) h(params.uri, messages);
   });
   return {
+    transportKind: 'browser' as const,
     async openDocument(uri, content) {
       await connection.sendNotification(DidOpenTextDocumentNotification.type, {
         textDocument: { uri, languageId: 'ttr', version: 1, text: content },
