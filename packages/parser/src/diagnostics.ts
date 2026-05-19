@@ -8,6 +8,7 @@ export enum DiagnosticCode {
   InvalidType = 'ttr/invalid-type',
   EntityAttributeNotFound = 'ttr/entity-attribute-not-found',
   PrimaryKeyColumnNotFound = 'ttr/primary-key-column-not-found',
+  WrongFileKind = 'ttr/wrong-file-kind',
 }
 
 export enum DiagnosticSeverity {

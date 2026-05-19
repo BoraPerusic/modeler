@@ -16,7 +16,7 @@ Once dev complete, mark it "under review" in the list below, and notify the user
 ## Task List Status
 
 [x] A grammar
-[ ] B1 ast extension
+[x] B1 ast extension
 [ ] B2 symbol table
 [ ] B3 resover
 [ ] B4 diagnostic

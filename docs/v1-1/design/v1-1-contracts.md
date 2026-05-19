@@ -153,8 +153,7 @@ export interface GraphLayout {
     zoom: number;
     panX: number;
     panY: number;
-    /** Same DisplayMode union as v1's LayoutFile. */
-    displayMode: 'just-names' | 'with-types' | 'with-constraints';
+    displayMode: string; // Validated against the DisplayMode union in §11.2 by the semantics layer.
   };
   nodes: Record<string, { x: number; y: number }>;
   edges: Record<string, { bendPoints?: [number, number][] }>;
@@ -706,5 +705,6 @@ export interface CreateGraphWizardProps {
 
 ## 12. Changelog
 
+- **v3, 2026-05-19** — relaxed GraphLayout.viewport.displayMode in §2 from the three-member union to string; the union narrowing now happens in semantics, not parsing. Designer's DisplayMode in §11.2 unchanged.
 - **v2, 2026-05-18** — added §11 (Designer state types) reflecting the locked schema-toggle-removed decision; added `ttr/graph-objects-empty` and `ttr/graph-name-mismatch` to §6.
 - **v1, 2026-05-18** — initial draft. All sections subject to amendment under the contract-amendment discipline (mini-task-lists never override; PRs against this file first).

@@ -49,6 +49,10 @@ import {
   ParameterDefListContext,
   ListOfStringsContext,
   ListOfIdsContext,
+  PackageDeclContext,
+  ImportDeclContext,
+  GraphBlockContext,
+  GraphPropertyContext,
 } from './generated/TTRParser.js';
 import type {
   SourceLocation,
@@ -96,6 +100,10 @@ import type {
   QueryDef,
   RoleDef,
   Er2cncRoleDef,
+  PackageDecl,
+  ImportDecl,
+  GraphBlock,
+  GraphLayout,
 } from './ast.js';
 import { DiagnosticCode } from './diagnostics.js';
 import { RecoveryReportingStrategy } from './recovery.js';
@@ -161,9 +169,9 @@ export function parseString(content: string, fileLabel = '<string>'): ParseResul
 
   try {
     const tree = parser.document();
-    const doc = walkDocument(tree, fileLabel);
+    const { doc, errors: docErrors } = walkDocument(tree, fileLabel, errors);
     for (const event of recoveryStrategy.recoveryEvents) {
-      errors.push({
+      docErrors.push({
         code: DiagnosticCode.ParseRecoveryInfo,
         message: event.description,
         severity: 'info',
@@ -178,7 +186,7 @@ export function parseString(content: string, fileLabel = '<string>'): ParseResul
         },
       });
     }
-    return { ast: doc, errors, sourceFile: fileLabel };
+    return { ast: doc, errors: docErrors, sourceFile: fileLabel };
   } catch (e) {
     return {
       errors: [
@@ -200,19 +208,41 @@ export async function parseFile(filePath: string): Promise<ParseResult> {
   return parseString(content, filePath);
 }
 
-function walkDocument(ctx: DocumentContext, file: string): Document {
+function walkDocument(ctx: DocumentContext, file: string, syntaxErrors: ParseError[]): { doc: Document; errors: ParseError[] } {
+  const localErrors: ParseError[] = [...syntaxErrors];
+
+  const packageCtx = ctx.packageDecl();
+  const importCtxs = ctx.importDecl();
   const schemaCtx = ctx.schemaDirective();
+  const graphCtx = ctx.graphBlock();
   const defContexts = ctx.definition();
 
   const definitions: Definition[] = defContexts.map((defCtx: DefinitionContext) =>
     walkDefinition(defCtx, file)
   );
 
-  return {
+  // TODO(C1): also emit WrongFileKind when a .ttrg file has no graph block.
+  // The walker doesn't know the file extension; that check belongs in the LSP/file-loader
+  // layer once .ttrg parsing lands.
+  if (graphCtx && definitions.length > 0) {
+    localErrors.push({
+      code: DiagnosticCode.WrongFileKind,
+      message: "A file containing 'graph { ... }' must not also contain top-level 'def' definitions.",
+      severity: 'error',
+      source: makeSourceLocation(graphCtx, file),
+    });
+  }
+
+  const doc: Document = {
+    packageDecl: packageCtx ? walkPackageDecl(packageCtx, file) : undefined,
+    imports: importCtxs.map((ic) => walkImportDecl(ic, file)),
     schemaDirective: schemaCtx ? walkSchemaDirective(schemaCtx, file) : undefined,
+    graph: graphCtx ? walkGraphBlock(graphCtx, file) : undefined,
     definitions,
     source: makeSourceLocation(ctx, file),
   };
+
+  return { doc, errors: localErrors };
 }
 
 function walkSchemaDirective(ctx: SchemaDirectiveContext, file: string): SchemaDirective {
@@ -231,6 +261,156 @@ function walkSchemaDirective(ctx: SchemaDirectiveContext, file: string): SchemaD
     namespace: namespaceCtx ? namespaceCtx.getText() : undefined,
     source: makeSourceLocation(ctx, file),
   };
+}
+
+function walkPackageDecl(ctx: PackageDeclContext, file: string): PackageDecl {
+  const qnameCtx = ctx.qualifiedName();
+  const idCtx = qnameCtx.id();
+  const parts = idCtx.idPart().map((pt) => pt.getText());
+  return {
+    kind: 'packageDecl',
+    name: parts.join('.'),
+    parts,
+    source: makeSourceLocation(ctx, file),
+  };
+}
+
+function walkImportDecl(ctx: ImportDeclContext, file: string): ImportDecl {
+  const qnameCtx = ctx.qualifiedName();
+  const idCtx = qnameCtx.id();
+  const parts = idCtx.idPart().map((pt) => pt.getText());
+  return {
+    kind: 'importDecl',
+    target: parts.join('.'),
+    targetParts: parts,
+    wildcard: ctx.STAR() !== null,
+    source: makeSourceLocation(ctx, file),
+  };
+}
+
+function walkGraphBlock(ctx: GraphBlockContext, file: string): GraphBlock {
+  const nameCtx = ctx.id();
+  const name = nameCtx ? nameCtx.getText() : '';
+
+  let schema: 'db' | 'er' | 'map' | 'query' | 'cnc' | undefined;
+  let description: string | undefined;
+  let tags: string[] | undefined;
+  let objects: string[] = [];
+  let layout: GraphLayout | undefined;
+
+  for (const gp of ctx.graphProperty()) {
+    if (gp.graphSchemaProperty()) {
+      const sc = gp.graphSchemaProperty()!.schemaCode();
+      if (sc.DB()) schema = 'db';
+      else if (sc.ER()) schema = 'er';
+      else if (sc.MAP()) schema = 'map';
+      else if (sc.QUERY()) schema = 'query';
+      else if (sc.CNC()) schema = 'cnc';
+    }
+    if (gp.descriptionProperty()) {
+      const parsed = walkStringLiteralForm(gp.descriptionProperty()!.stringLiteralForm()!, file);
+      description = parsed.value;
+    }
+    if (gp.tagsProperty()) {
+      tags = walkListOfStrings(gp.tagsProperty()!.listOfStrings()!, file);
+    }
+    if (gp.graphObjectsProperty()) {
+      objects = gp.graphObjectsProperty()!.id().map((idCtx) => {
+        const parts = idCtx.idPart().map((pt) => pt.getText());
+        return parts.join('.');
+      });
+    }
+    if (gp.graphLayoutProperty()) {
+      layout = walkGraphLayout(gp.graphLayoutProperty()!.object_(), file);
+    }
+  }
+
+  return { kind: 'graphBlock', name, schema, description, tags, objects, layout, source: makeSourceLocation(ctx, file) };
+}
+
+function walkGraphLayout(ctx: Object_Context, file: string): GraphLayout {
+  let viewport: GraphLayout['viewport'] | undefined;
+  const nodes: Record<string, { x: number; y: number }> = {};
+  const edges: Record<string, { bendPoints?: [number, number][] }> = {};
+
+  for (const entry of ctx.propertyList()?.propertyEntry() ?? []) {
+    const key = entry.key().getText();
+    const valueCtx = entry.value();
+    if (!valueCtx) continue;
+
+    if (key === 'viewport' && valueCtx.object_()) {
+      viewport = walkViewport(valueCtx.object_()!, file);
+    } else if (key === 'nodes' && valueCtx.object_()) {
+      for (const nodeEntry of valueCtx.object_()!.propertyList()?.propertyEntry() ?? []) {
+        const nodeKey = nodeEntry.key().getText();
+        const nodeVal = nodeEntry.value()?.object_();
+        if (nodeVal) {
+          const xEntry = nodeVal.propertyList()?.propertyEntry().find((e) => e.key().getText() === 'x');
+          const yEntry = nodeVal.propertyList()?.propertyEntry().find((e) => e.key().getText() === 'y');
+          const x = xEntry?.value()?.literal()?.NUMBER_LITERAL() ? Number(xEntry.value()!.literal()!.NUMBER_LITERAL()!.getText()) : 0;
+          const y = yEntry?.value()?.literal()?.NUMBER_LITERAL() ? Number(yEntry.value()!.literal()!.NUMBER_LITERAL()!.getText()) : 0;
+          nodes[nodeKey] = { x, y };
+        }
+      }
+    } else if (key === 'edges' && valueCtx.object_()) {
+      for (const edgeEntry of valueCtx.object_()!.propertyList()?.propertyEntry() ?? []) {
+        const edgeKey = edgeEntry.key().getText();
+        const edgeVal = edgeEntry.value()?.object_();
+        if (!edgeVal) continue;
+
+        const bpEntry = edgeVal.propertyList()?.propertyEntry()
+          .find((e) => e.key().getText() === 'bendPoints');
+        const bpList  = bpEntry?.value()?.list();
+        if (!bpList) {
+          edges[edgeKey] = {};
+          continue;
+        }
+
+        const bendPoints: [number, number][] = [];
+        for (const item of bpList.value()) {
+          const inner = item.list();
+          if (!inner) continue;
+          const pair = inner.value();
+          if (pair.length !== 2) continue;
+          const a = pair[0].literal()?.NUMBER_LITERAL();
+          const b = pair[1].literal()?.NUMBER_LITERAL();
+          if (a && b) {
+            bendPoints.push([Number(a.getText()), Number(b.getText())]);
+          }
+        }
+        edges[edgeKey] = { bendPoints: bendPoints.length > 0 ? bendPoints : undefined };
+      }
+    }
+  }
+
+  return { viewport, nodes, edges };
+}
+
+function walkViewport(ctx: Object_Context, _file: string): GraphLayout['viewport'] {
+  let zoom = 1.0;
+  let panX = 0;
+  let panY = 0;
+  let displayMode = 'just-names';
+
+  const list = ctx.propertyList();
+  if (!list) return { zoom, panX, panY, displayMode };
+  for (const entry of list.propertyEntry()) {
+    const key = entry.key().getText();
+    const val = entry.value();
+    if (!val) continue;
+    if (key === 'zoom' && val.literal()?.NUMBER_LITERAL()) {
+      zoom = Number(val.literal()!.NUMBER_LITERAL()!.getText());
+    } else if (key === 'panX' && val.literal()?.NUMBER_LITERAL()) {
+      panX = Number(val.literal()!.NUMBER_LITERAL()!.getText());
+    } else if (key === 'panY' && val.literal()?.NUMBER_LITERAL()) {
+      panY = Number(val.literal()!.NUMBER_LITERAL()!.getText());
+    } else if (key === 'displayMode') {
+      const idCtx = val.id();
+      if (idCtx) displayMode = idCtx.getText();
+    }
+  }
+
+  return { zoom, panX, panY, displayMode };
 }
 
 function walkDefinition(ctx: DefinitionContext, file: string): Definition {
