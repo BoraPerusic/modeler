@@ -1,11 +1,25 @@
 #!/usr/bin/env node
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const GRAMMAR_PATH = path.resolve(__dirname, '../../grammar/src/TTR.g4');
-const OUTPUT_PATH = path.join(__dirname, '../syntaxes/ttr.tmLanguage.json');
-export function parseGrammar(g4Content) {
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.parseGrammar = parseGrammar;
+exports.tokenToScope = tokenToScope;
+const fs_1 = __importDefault(require("fs"));
+const path_1 = __importDefault(require("path"));
+// The sibling .js is emitted by `pnpm run build-generator`. Do not edit the .js by hand.
+function getScriptDir() {
+    if (process.argv[1]) {
+        return path_1.default.dirname(path_1.default.resolve(process.argv[1]));
+    }
+    return '<unknown-script-dir>';
+}
+const __dirname_script = getScriptDir();
+const monorepoRoot = path_1.default.resolve(__dirname_script, '..', '..', '..');
+const GRAMMAR_PATH = path_1.default.join(monorepoRoot, 'packages', 'grammar', 'src', 'TTR.g4');
+const OUTPUT_PATH = path_1.default.join(__dirname_script, '..', 'syntaxes', 'ttr.tmLanguage.json');
+function parseGrammar(g4Content) {
     const tokens = [];
     const lexerRuleRegex = /^([A-Z_][A-Z0-9_]*)\s*:\s*(.+?)\s*;/gm;
     let match;
@@ -22,8 +36,15 @@ export function parseGrammar(g4Content) {
     }
     return tokens;
 }
-export function tokenToScope(name, literal) {
+function tokenToScope(name, literal) {
     switch (name) {
+        // v1.1 top-level keywords
+        case 'PACKAGE': return 'keyword.control.package.ttr';
+        case 'IMPORT': return 'keyword.control.import.ttr';
+        case 'GRAPH': return 'keyword.declaration.graph.ttr';
+        // v1.1 graph body keywords
+        case 'OBJECTS': return 'keyword.other.property.ttr';
+        case 'LAYOUT': return 'keyword.other.property.ttr';
         case 'DEF': return 'keyword.control.def.ttr';
         case 'SCHEMA': return 'keyword.control.def.ttr';
         case 'NAMESPACE': return 'keyword.control.def.ttr';
@@ -141,16 +162,11 @@ function escapeRegex(s) {
 function buildGrammar(tokens) {
     const byScope = new Map();
     const rules = [];
-    for (const token of tokens) {
-        const scope = tokenToScope(token.name, token.literal);
-        if (!scope)
-            continue;
-        if (!byScope.has(scope))
-            byScope.set(scope, []);
-        byScope.get(scope).push(escapeRegex(token.literal));
-    }
     const scopeMap = {
         'keyword.control.def.ttr': [],
+        'keyword.control.package.ttr': [],
+        'keyword.control.import.ttr': [],
+        'keyword.declaration.graph.ttr': [],
         'keyword.other.schema.ttr': [],
         'keyword.other.kind.ttr': [],
         'keyword.other.property.ttr': [],
@@ -164,13 +180,19 @@ function buildGrammar(tokens) {
         'punctuation.section.brackets.ttr': [],
         'punctuation.section.parens.ttr': [],
     };
-    for (const [scope, lits] of byScope) {
-        if (scopeMap[scope]) {
-            scopeMap[scope].push({ scope, match: '\\b(' + lits.join('|') + ')\\b' });
-        }
+    for (const token of tokens) {
+        const scope = tokenToScope(token.name, token.literal);
+        if (!scope)
+            continue;
+        if (!byScope.has(scope))
+            byScope.set(scope, []);
+        byScope.get(scope).push(escapeRegex(token.literal));
     }
     const keywordScopes = [
         'keyword.control.def.ttr',
+        'keyword.control.package.ttr',
+        'keyword.control.import.ttr',
+        'keyword.declaration.graph.ttr',
         'keyword.other.schema.ttr',
         'keyword.other.kind.ttr',
         'keyword.other.property.ttr',
@@ -251,8 +273,13 @@ function buildGrammar(tokens) {
     };
     return grammar;
 }
-const g4Content = fs.readFileSync(GRAMMAR_PATH, 'utf-8');
-const tokens = parseGrammar(g4Content);
-const grammar = buildGrammar(tokens);
-fs.writeFileSync(OUTPUT_PATH, JSON.stringify(grammar, null, 2));
-console.log(`Generated TextMate grammar (${tokens.length} tokens) to ${OUTPUT_PATH}`);
+function main() {
+    const g4Content = fs_1.default.readFileSync(GRAMMAR_PATH, 'utf-8');
+    const tokens = parseGrammar(g4Content);
+    const grammar = buildGrammar(tokens);
+    fs_1.default.writeFileSync(OUTPUT_PATH, JSON.stringify(grammar, null, 2));
+    console.log(`Generated TextMate grammar (${tokens.length} tokens) to ${OUTPUT_PATH}`);
+}
+const invokedAsScript = !!process.argv[1] && path_1.default.resolve(process.argv[1]).endsWith('generate-tm-grammar.js');
+if (invokedAsScript)
+    main();

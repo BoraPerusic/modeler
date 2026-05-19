@@ -1,14 +1,15 @@
 // =============================================================================
-// TTR (Tatrman) v1 grammar — Phase 1.3 promotion of docs/v1/TTR-v1.g4
+// TTR (Tatrman) v2 grammar — v1.1 promotion: packages, imports, graph blocks
 //
-// Promotion fixes vs the source sketch:
-//   1. STRING_LITERAL_FORM is now a parser rule `stringLiteralForm` (the
-//      sketch had it as a lexer rule with alternation between two existing
-//      tokens, which doesn't make sense in ANTLR4's lexer FSA).
-//   2. EQ (==) is the equality operator only. The propsep '=' is EQUALS
-//      and `is` accepts COLON | EQUALS exclusively.
-//   3. The `is` parser rule renamed to `propSep` because `is` is a Kotlin
-//      keyword in the generated visitor's host language.
+// Changes vs v1:
+//   1. New top-level constructs: `package <qualifiedName>`, `import <qualifiedName>[]`,
+//      `graph <id> { ... }`.
+//   2. New lexer tokens: PACKAGE, IMPORT, GRAPH, OBJECTS, LAYOUT, STAR.
+//   3. New parser rules: packageDecl, importDecl, graphBlock, graphProperty,
+//      graphSchemaProperty, graphObjectsProperty, graphLayoutProperty, qualifiedName.
+//   4. Updated document rule to accept the new constructs.
+//   5. Extended idPart to include the new keywords so they remain usable as
+//      cross-reference components.
 // =============================================================================
 
 grammar TTR;
@@ -16,7 +17,35 @@ grammar TTR;
 // ----- Top level -----
 
 document
-  : schemaDirective? definition* EOF
+  : packageDecl? importDecl* (schemaDirective | graphBlock)? definition* EOF
+  ;
+
+packageDecl
+  : PACKAGE qualifiedName
+  ;
+
+importDecl
+  : IMPORT qualifiedName (DOT STAR)?
+  ;
+
+graphBlock
+  : GRAPH id LBRACE (graphProperty (COMMA? graphProperty)* COMMA?)? RBRACE
+  ;
+
+graphProperty
+  : graphSchemaProperty
+  | descriptionProperty
+  | tagsProperty
+  | graphObjectsProperty
+  | graphLayoutProperty
+  ;
+
+graphSchemaProperty   : SCHEMA propSep? schemaCode ;
+graphObjectsProperty  : OBJECTS propSep? LBRACK ( id (COMMA id)* )? COMMA? RBRACK ;
+graphLayoutProperty   : LAYOUT propSep? object_ ;
+
+qualifiedName
+  : id
   ;
 
 schemaDirective
@@ -332,6 +361,8 @@ idPart
   | MODEL
   | NAME | LABEL | DIRECTION                              // common as identifiers / object keys (e.g. `def column name`)
   | FROM | TO                                            // allowed as object property keys (e.g. cardinality, join pairs)
+  | PACKAGE | IMPORT | GRAPH                              // v1.1 new top-level keywords
+  | OBJECTS | LAYOUT                                      // v1.1 graph body keywords
   ;
 
 // =============================================================================
@@ -341,6 +372,12 @@ idPart
 DEF        : 'def' ;
 SCHEMA     : 'schema' ;
 NAMESPACE  : 'namespace' ;
+
+PACKAGE    : 'package' ;    // v1.1
+IMPORT     : 'import' ;     // v1.1
+GRAPH      : 'graph' ;      // v1.1
+OBJECTS    : 'objects' ;    // v1.1 graph body
+LAYOUT     : 'layout' ;     // v1.1 graph body
 
 DB    : 'db' ;
 ER    : 'er' ;
@@ -456,6 +493,7 @@ RBRACK : ']' ;
 LPAREN : '(' ;
 RPAREN : ')' ;
 DOT    : '.' ;
+STAR   : '*' ;    // v1.1 wildcard for `import x.y.*`
 
 // Literals
 NULL_LITERAL          : 'null' ;

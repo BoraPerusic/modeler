@@ -10,6 +10,9 @@ const GRAMMAR_PATH = path.resolve(__dirname, '../../../grammar/src/TTR.g4');
 
 const EXPECTED_SCOPES = [
   'keyword.control.def.ttr',
+  'keyword.control.package.ttr',    // NEW (v1.1)
+  'keyword.control.import.ttr',      // NEW (v1.1)
+  'keyword.declaration.graph.ttr',   // NEW (v1.1)
   'keyword.other.schema.ttr',
   'keyword.other.kind.ttr',
   'keyword.other.property.ttr',
@@ -72,5 +75,13 @@ describe('TextMate grammar generator', () => {
     for (const [name, literal] of [['DB', 'db'], ['ER', 'er'], ['MAP', 'map'], ['CNC', 'cnc'], ['QUERY', 'query']]) {
       expect(tokenToScope(name, literal)).toBe('keyword.other.schema.ttr');
     }
+  });
+
+  it('v1.1 keywords map to dedicated scopes', () => {
+    expect(tokenToScope('PACKAGE', 'package')).toBe('keyword.control.package.ttr');
+    expect(tokenToScope('IMPORT',  'import')).toBe('keyword.control.import.ttr');
+    expect(tokenToScope('GRAPH',   'graph')).toBe('keyword.declaration.graph.ttr');
+    expect(tokenToScope('OBJECTS', 'objects')).toBe('keyword.other.property.ttr');
+    expect(tokenToScope('LAYOUT',  'layout')).toBe('keyword.other.property.ttr');
   });
 });

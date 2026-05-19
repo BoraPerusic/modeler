@@ -1,12 +1,21 @@
 #!/usr/bin/env node
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+// The sibling .js is emitted by `pnpm run build-generator`. Do not edit the .js by hand.
 
-const GRAMMAR_PATH = path.resolve(__dirname, '../../grammar/src/TTR.g4');
-const OUTPUT_PATH = path.join(__dirname, '../syntaxes/ttr.tmLanguage.json');
+function getScriptDir(): string {
+  if (process.argv[1]) {
+    return path.dirname(path.resolve(process.argv[1]));
+  }
+  return '<unknown-script-dir>';
+}
+
+const __dirname_script = getScriptDir();
+const monorepoRoot = path.resolve(__dirname_script, '..', '..', '..');
+
+const GRAMMAR_PATH = path.join(monorepoRoot, 'packages', 'grammar', 'src', 'TTR.g4');
+const OUTPUT_PATH  = path.join(__dirname_script, '..', 'syntaxes', 'ttr.tmLanguage.json');
 
 interface TokenDef {
   name: string;
@@ -41,6 +50,13 @@ export function parseGrammar(g4Content: string): TokenDef[] {
 
 export function tokenToScope(name: string, literal: string): string | null {
   switch (name) {
+    // v1.1 top-level keywords
+    case 'PACKAGE': return 'keyword.control.package.ttr';
+    case 'IMPORT': return 'keyword.control.import.ttr';
+    case 'GRAPH': return 'keyword.declaration.graph.ttr';
+    // v1.1 graph body keywords
+    case 'OBJECTS': return 'keyword.other.property.ttr';
+    case 'LAYOUT': return 'keyword.other.property.ttr';
     case 'DEF': return 'keyword.control.def.ttr';
     case 'SCHEMA': return 'keyword.control.def.ttr';
     case 'NAMESPACE': return 'keyword.control.def.ttr';
@@ -161,15 +177,11 @@ function buildGrammar(tokens: TokenDef[]): object {
   const byScope = new Map<string, string[]>();
   const rules: ScopeRule[] = [];
 
-  for (const token of tokens) {
-    const scope = tokenToScope(token.name, token.literal);
-    if (!scope) continue;
-    if (!byScope.has(scope)) byScope.set(scope, []);
-    byScope.get(scope)!.push(escapeRegex(token.literal));
-  }
-
   const scopeMap: Record<string, ScopeRule[]> = {
     'keyword.control.def.ttr': [],
+    'keyword.control.package.ttr': [],
+    'keyword.control.import.ttr': [],
+    'keyword.declaration.graph.ttr': [],
     'keyword.other.schema.ttr': [],
     'keyword.other.kind.ttr': [],
     'keyword.other.property.ttr': [],
@@ -184,14 +196,18 @@ function buildGrammar(tokens: TokenDef[]): object {
     'punctuation.section.parens.ttr': [],
   };
 
-  for (const [scope, lits] of byScope) {
-    if (scopeMap[scope]) {
-      scopeMap[scope].push({ scope, match: '\\b(' + lits.join('|') + ')\\b' });
-    }
+  for (const token of tokens) {
+    const scope = tokenToScope(token.name, token.literal);
+    if (!scope) continue;
+    if (!byScope.has(scope)) byScope.set(scope, []);
+    byScope.get(scope)!.push(escapeRegex(token.literal));
   }
 
   const keywordScopes = [
     'keyword.control.def.ttr',
+    'keyword.control.package.ttr',
+    'keyword.control.import.ttr',
+    'keyword.declaration.graph.ttr',
     'keyword.other.schema.ttr',
     'keyword.other.kind.ttr',
     'keyword.other.property.ttr',
@@ -278,8 +294,13 @@ function buildGrammar(tokens: TokenDef[]): object {
   return grammar;
 }
 
-const g4Content = fs.readFileSync(GRAMMAR_PATH, 'utf-8');
-const tokens = parseGrammar(g4Content);
-const grammar = buildGrammar(tokens);
-fs.writeFileSync(OUTPUT_PATH, JSON.stringify(grammar, null, 2));
-console.log(`Generated TextMate grammar (${tokens.length} tokens) to ${OUTPUT_PATH}`);
+function main(): void {
+  const g4Content = fs.readFileSync(GRAMMAR_PATH, 'utf-8');
+  const tokens    = parseGrammar(g4Content);
+  const grammar   = buildGrammar(tokens);
+  fs.writeFileSync(OUTPUT_PATH, JSON.stringify(grammar, null, 2));
+  console.log(`Generated TextMate grammar (${tokens.length} tokens) to ${OUTPUT_PATH}`);
+}
+
+const invokedAsScript = !!process.argv[1] && path.resolve(process.argv[1]).endsWith('generate-tm-grammar.js');
+if (invokedAsScript) main();
