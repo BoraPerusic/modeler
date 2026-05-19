@@ -93,4 +93,4 @@ The workflow's smoke step `curl -fI`'s the deployed `/`, `/assets/index-*.js`, `
 
 ## Embedding the Designer (v1.x — not yet)
 
-A future v1.x release will publish a `<script>`-tag embed for hosting the Designer inside third-party documentation sites. The wire-up is described in [docs/design/architecture.md](../../docs/design/architecture.md) §10 and [docs/plan/implementation-plan.md](../../docs/plan/implementation-plan.md) §11. Out of scope for Phase 3.
+A future v1.x release will publish a `<script>`-tag embed for hosting the Designer inside third-party documentation sites. The wire-up is described in [docs/v1/design/architecture.md](../../docs/v1/design/architecture.md) §10 and [docs/v1/plan/implementation-plan.md](../../docs/v1/plan/implementation-plan.md) §11. Out of scope for Phase 3.

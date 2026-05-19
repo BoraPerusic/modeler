@@ -174,4 +174,4 @@ If you're suspicious that an extension change broke something, run `test:smoke` 
 * The Designer's own [README](packages/designer/README.md) has more on its toggles, env vars, deploy workflow, and the future embed story.
 * The extension's [README](packages/vscode-ext/README.md) documents the smoke test cases and how the package handles the CJS/ESM split with the LSP.
 * The [LSP README](packages/lsp/README.md) lists every method (standard + custom `modeler/*`) the server exposes.
-* [docs/design/architecture.md](docs/design/architecture.md) §11 has the Designer ↔ LSP control-flow diagram for the deployed shape.
+* [docs/v1/design/architecture.md](docs/v1/design/architecture.md) §11 has the Designer ↔ LSP control-flow diagram for the deployed shape.

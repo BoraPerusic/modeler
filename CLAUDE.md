@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Tatrman Modeler — editor-side tooling for the TTR modeling language. Delivers a VS Code plugin, a static React graphical designer, and (later) an IntelliJ plugin, all sharing one TypeScript LSP server. TTR itself is consumed at runtime by `ai-platform` (separate repo); this repo is editor tooling only and never talks to that service.
 
-Authoritative design and decisions live in `docs/design/architecture.md` — read it before making non-trivial architectural changes. The phased plan is in `docs/plan/implementation-plan.md`.
+Authoritative design and decisions for v1 live in `docs/v1/design/architecture.md` — read it before making non-trivial architectural changes. The v1 phased plan is in `docs/v1/plan/implementation-plan.md`. The v1.1 design (packages, imports, `.ttrg`) lives under `docs/v1-1/`.
 
 ## Commands
 
@@ -76,7 +76,7 @@ grammar  →  parser  →  semantics  →  lsp  →  vscode-ext
 
 ### Phase review cadence
 
-The repo uses a `/review`-driven review cycle. Reviews and task lists live at repo root as numbered artifacts: `review-NNN.md` (prose findings) and `tasks-review-NNN.md` (actionable steps with verification commands). Numbering is serial across the whole project, not per-phase. Phase-progress docs (`docs/plan/progress-phase-NN.md`) record the developer's claims; reviews verify them against runtime. Treat `[x]` marks in progress docs as intent, not truth — verify before agreeing.
+The repo uses a `/review`-driven review cycle. Reviews and task lists for v1 live under `docs/v1/implementation/` as numbered artifacts: `review-NNN.md` (prose findings) and `tasks-review-NNN.md` (actionable steps with verification commands). Numbering is serial across the whole project, not per-phase. Phase-progress docs (`docs/v1/plan/progress-phase-NN.md`) record the developer's claims; reviews verify them against runtime. Treat `[x]` marks in progress docs as intent, not truth — verify before agreeing.
 
 ## Conventions
 

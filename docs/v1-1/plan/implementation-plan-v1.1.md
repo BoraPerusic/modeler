@@ -1,6 +1,6 @@
 # Tatrman Modeler v1.1 — Implementation Plan
 
-**Status:** Plan v1, 2026-05-18. Covers the v1.1 release: packages + imports + `.ttrg` graph files (language change), productivity-tier LSP, polish-tier LSP. Design rationale in [`docs/design/v1.1-packages-and-graphs.md`](../design/v1.1-packages-and-graphs.md). Grammar diff for ai-platform in [`docs/design/grammar-v1-1-changes.md`](../design/grammar-v1-1-changes.md).
+**Status:** Plan v1, 2026-05-18. Covers the v1.1 release: packages + imports + `.ttrg` graph files (language change), productivity-tier LSP, polish-tier LSP. Design rationale in [`docs/v1-1/design/v1.1-packages-and-graphs.md`](../design/v1.1-packages-and-graphs.md). Grammar diff for ai-platform in [`docs/v1-1/design/grammar-v1-1-changes.md`](../design/grammar-v1-1-changes.md).
 
 ## Plan shape
 
@@ -61,7 +61,7 @@ v1.1 is organised into nine sub-phases (A–I). The first seven (A–G) deliver 
   - `ttr/package-declaration-mismatch` (Error)
   - `ttr/missing-package-declaration` (Info)
   - `ttr/ambiguous-reference` (Error)
-- Resolve open question §13.10 (stock-vocab qname under packages) — implement chosen option; document the choice in `docs/design/diagnostics.md` and `architecture.md` §4.3
+- Resolve open question §13.10 (stock-vocab qname under packages) — implement chosen option; document the choice in `docs/v1/design/diagnostics.md` and `docs/v1/design/architecture.md` §4.3
 - Existing v1 features (go-to-def, find-refs, hover) keep working with the new qname shape — verify via the integration-test suite
 
 **Acceptance**: existing v1 integration tests pass with v1.1-shaped qnames; new tests cover each new diagnostic code (one fixture per code under `samples/broken/v1.1/`); the cnc stock-vocab qname choice is exercised by a test asserting the chosen form.
@@ -173,15 +173,15 @@ v1.1 is organised into nine sub-phases (A–I). The first seven (A–G) deliver 
 - Run `modeler migrate-to-packages` on `samples/v1-mini/` and `samples/v1-metadata/`; commit the results as `samples/v1.1-mini/` and `samples/v1.1-metadata/` (keeping the originals as v1 fixtures for the migration tests)
 - Hand-author a few extra `.ttrg` files under each migrated sample to exercise non-trivial graphs (subdomain views, focused entity views)
 - Update `samples/builtin/cnc-stock-roles.ttr` per the qname-shape decision from 1.1.B (open question §13.10)
-- Finalise `docs/design/grammar-v1-1-changes.md` based on what actually shipped in 1.1.A
-- Update `docs/design/architecture.md`:
+- Finalise `docs/v1-1/design/grammar-v1-1-changes.md` based on what actually shipped in 1.1.A
+- Update `docs/v1/design/architecture.md`:
   - §4.3 stock vocabulary: reference new package shape
   - §4.4 edit synthesizer: note that rename + add/remove-object are now load-bearing (no longer a v1 placeholder)
   - §5 project model: reference packages
   - §6 layout sidecar (`.ttrl`): replace with pointer to the `.ttrg` design doc
   - §10 open questions: mark resolved ones
   - §11 Designer ↔ LSP: update to reflect graph-centric flow
-- Write `docs/plan/progress-phase-v1.1.md` with task-completion log
+- Write `docs/v1-1/plan/progress-phase-v1.1.md` with task-completion log
 - Update `CLAUDE.md` references where needed
 
 **Acceptance**: `pnpm -r build && pnpm -r test && pnpm -r typecheck && pnpm -r lint` green; both migrated sample bundles open in the Designer; ai-platform's parser maintainer has reviewed `grammar-v1-1-changes.md` (sign-off can be async).
@@ -267,8 +267,8 @@ v1.1 ships when:
 - Rename a def in VS Code propagates through every reference site *and* through every `.ttrg` that listed the renamed object
 - Format-document produces deterministic output on every file in `samples/v1.1-*/`
 - The migration CLI converts a fresh copy of `samples/v1-metadata/` to a working v1.1 project without manual intervention
-- `docs/design/grammar-v1-1-changes.md` is sign-off-ready for ai-platform's parser maintainer
-- `docs/design/architecture.md` reflects v1.1's shape
+- `docs/v1-1/design/grammar-v1-1-changes.md` is sign-off-ready for ai-platform's parser maintainer
+- `docs/v1/design/architecture.md` reflects v1.1's shape
 - All four CI checks green (build, test, typecheck, lint)
 - VS Code Marketplace + JetBrains Marketplace bumps to v1.1.0
 

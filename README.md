@@ -14,25 +14,14 @@ Edit mode (round-tripping graph edits back into `.ttr` text) lands in v1.1; `mod
 
 ## Architecture
 
-See [docs/design/architecture.md](docs/design/architecture.md) for the full design and decision log, plus the Designer ↔ LSP control-flow diagram for the deployed (browser) topology.
+See [docs/v1/design/architecture.md](docs/v1/design/architecture.md) for the full design and decision log, plus the Designer ↔ LSP control-flow diagram for the deployed (browser) topology.
 
-## Phase status
+The v1.1 design (packages, imports, and `.ttrg` graph files) lives under [docs/v1-1/](docs/v1-1/).
 
-**Phase 3 — complete.** All sections A–K shipped. See [docs/plan/progress-phase-03.md](docs/plan/progress-phase-03.md) for the per-section progress log and [docs/plan/tasks-phase-03-designer.md](docs/plan/tasks-phase-03-designer.md) for the original task plan.
+## Status and current work
 
-| Section | Scope |
-|---|---|
-| A | Designer scaffold cleanup |
-| B | LSP custom-method integration |
-| C | `db` schema rendering |
-| D | `er` schema rendering with cardinality glyphs |
-| E | Inspector panel |
-| F | Layout persistence (positions, viewport, display mode) |
-| G | Static GitHub Pages deploy |
-| H | Symbol indexing for `relation` / `query` / `role` / `er2db*` kinds |
-| I | `ttr/parse-recovery-info` diagnostic |
-| J | `@vscode/test-electron` smoke tests (TC1–TC5) |
-| K | Documentation pass |
+The version V1 is ready and shipped. We are currently developing the v1-1, according to the plan [docs/v1-1/plan/implementation-plan-v1.1.md](docs/v1-1/plan/implementation-plan-v1.1.md).
+
 
 ## Developing locally
 
@@ -74,8 +63,17 @@ For the VS Code extension dev cycle, open `packages/vscode-ext` in VS Code and p
 
 ## Documentation
 
-- [docs/design/architecture.md](docs/design/architecture.md) — Architecture and design decisions
-- [docs/design/diagnostics.md](docs/design/diagnostics.md) — Diagnostic codes, severities, examples
-- [docs/design/phase-03-contracts.md](docs/design/phase-03-contracts.md) — Phase-3 LSP custom-method contracts
-- [docs/plan/implementation-plan.md](docs/plan/implementation-plan.md) — Phased implementation plan
-- [docs/plan/progress-phase-03.md](docs/plan/progress-phase-03.md) — Phase 3 progress log
+### v1 (shipped)
+
+- [docs/v1/design/architecture.md](docs/v1/design/architecture.md) — Architecture and design decisions
+- [docs/v1/design/diagnostics.md](docs/v1/design/diagnostics.md) — Diagnostic codes, severities, examples
+- [docs/v1/design/phase-03-contracts.md](docs/v1/design/phase-03-contracts.md) — Phase-3 LSP custom-method contracts
+- [docs/v1/plan/implementation-plan.md](docs/v1/plan/implementation-plan.md) — Phased implementation plan
+- [docs/v1/plan/progress-phase-03.md](docs/v1/plan/progress-phase-03.md) — Phase 3 progress log
+- [docs/v1/implementation/](docs/v1/implementation/) — Per-review notes and task lists from the v1 build
+
+### v1.1 (planning)
+
+- [docs/v1-1/design/v1.1-packages-and-graphs.md](docs/v1-1/design/v1.1-packages-and-graphs.md) — Design spec for packages, imports, and `.ttrg` graph files
+- [docs/v1-1/design/grammar-v1-1-changes.md](docs/v1-1/design/grammar-v1-1-changes.md) — Grammar diff coordination doc for ai-platform's Kotlin parser
+- [docs/v1-1/plan/implementation-plan-v1.1.md](docs/v1-1/plan/implementation-plan-v1.1.md) — v1.1 phased plan (sub-phases A–I)
