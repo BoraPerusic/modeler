@@ -32,8 +32,10 @@ import {
   collectReferences,
   nestedDefs,
   ReferenceIndex,
+  PackageGraphBuilder,
   type ResolvedManifest,
   type ValidationDiagnostic,
+  type PackageGraph,
 } from '@modeler/semantics';
 import { buildProjectModelGraph, emptyLayout, validateLayout, buildSymbolDetail, type LayoutFile, type RenderableSchemaCode } from './model-graph.js';
 
@@ -95,6 +97,7 @@ export function createServerConnection(
   let resolver = new Resolver(projectSymbols);
   let validator = new Validator(projectSymbols, resolver, manifest);
   const refIndex = new ReferenceIndex();
+  let packageGraph: PackageGraph | null = null;
 
   /**
    * Locate the most-specific AST node under the cursor.
@@ -151,10 +154,16 @@ export function createServerConnection(
   }
 
   function enclosingQnameOf(def: Definition, ast: Document): string | undefined {
-    if (def.kind === 'entity' || def.kind === 'table' || def.kind === 'view' || def.kind === 'procedure') {
+    if (
+      def.kind === 'entity' || def.kind === 'table' || def.kind === 'view' ||
+      def.kind === 'procedure' || def.kind === 'relation' || def.kind === 'role' ||
+      def.kind === 'er2dbEntity' || def.kind === 'er2dbAttribute' ||
+      def.kind === 'er2dbRelation' || def.kind === 'er2cncRole'
+    ) {
       const schemaCode = ast.schemaDirective?.schemaCode ?? 'db';
       const namespace = ast.schemaDirective?.namespace ?? '';
-      return [schemaCode, namespace, def.name].filter((s) => s !== '').join('.');
+      const nsOrKind = namespace || def.kind;
+      return [schemaCode, nsOrKind, def.name].filter((s) => s !== '').join('.');
     }
     return undefined;
   }
@@ -178,6 +187,19 @@ export function createServerConnection(
   function rebuildValidator(): void {
     resolver = new Resolver(projectSymbols);
     validator = new Validator(projectSymbols, resolver, manifest);
+    packageGraph = null;
+  }
+
+  function getPackageGraph(): PackageGraph {
+    if (!packageGraph) {
+      const docs = new Map<string, Document>();
+      for (const uri of documents.keys()) {
+        const doc = parseDocument(documents.get(uri)?.getText() ?? '', uri);
+        if (doc) docs.set(uri, doc);
+      }
+      packageGraph = new PackageGraphBuilder(projectSymbols, docs).build();
+    }
+    return packageGraph;
   }
 
   function publishDiagnostics(uri: string, content: string): void {
@@ -225,8 +247,9 @@ export function createServerConnection(
     if (!result.ast) return;
     const schemaCode = result.ast.schemaDirective?.schemaCode ?? 'db';
     const namespace = result.ast.schemaDirective?.namespace ?? '';
-    projectSymbols.upsertDocument(uri, result.ast, schemaCode, namespace);
-    refIndex.upsertDocument(uri, result.ast, schemaCode, namespace, resolver);
+    const packageName = result.ast.packageDecl?.name ?? '';
+    projectSymbols.upsertDocument(uri, result.ast, schemaCode, namespace, packageName);
+    refIndex.upsertDocument(uri, result.ast, schemaCode, namespace, resolver, packageName);
   }
 
   documents.onDidOpen(async (event: TextDocumentChangeEvent<TextDocument>) => {
@@ -254,6 +277,7 @@ export function createServerConnection(
   documents.onDidClose((event: TextDocumentChangeEvent<TextDocument>) => {
     projectSymbols.removeDocument(event.document.uri);
     refIndex.removeDocument(event.document.uri);
+    packageGraph = null;
   });
 
   documents.onDidSave(() => {
@@ -265,7 +289,7 @@ export function createServerConnection(
       try {
         const docs = await opts.loadStock();
         for (const d of docs) {
-          projectSymbols.upsertDocument(d.uri, d.ast, d.schemaCode, d.namespace);
+          projectSymbols.upsertDocument(d.uri, d.ast, d.schemaCode, d.namespace, '');
         }
         rebuildValidator();
       } catch {
@@ -419,11 +443,12 @@ export function createServerConnection(
 
     const schemaCode = ast.schemaDirective?.schemaCode ?? 'db';
     const namespace = ast.schemaDirective?.namespace ?? '';
+    const packageName = ast.packageDecl?.name ?? '';
 
     if (found.kind === 'ref') {
       const res = resolver.resolveReference(
         { path: found.ref.path, parts: found.ref.parts },
-        { schemaCode, namespace, enclosingQname: enclosingQnameOf(found.from, ast) }
+        { schemaCode, namespace, enclosingQname: enclosingQnameOf(found.from, ast), packageName }
       );
       if (!res.resolved) return null;
       return {

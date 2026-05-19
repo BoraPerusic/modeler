@@ -319,9 +319,9 @@ def entity foo {
     });
     await sleep(120);
 
-    // Workspace symbol should now include the stock cnc.role.fact entry.
+    // Workspace symbol should now include the stock cnc.cnc.role.fact entry.
     const symbols = await pair.client.sendRequest('workspace/symbol', { query: 'fact' }) as lsp.SymbolInformation[];
-    expect(symbols.map((s) => s.name)).toContain('cnc.role.fact');
+    expect(symbols.map((s) => s.name)).toContain('cnc.cnc.role.fact');
     pair.client.dispose();
     pair.server.dispose();
   });

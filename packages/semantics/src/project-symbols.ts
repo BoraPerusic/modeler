@@ -5,7 +5,7 @@ export class ProjectSymbolTable {
   private byDocument: Map<string, DocumentSymbolTable> = new Map();
   private byQname: Map<string, SymbolEntry[]> = new Map();
 
-  upsertDocument(uri: string, ast: Document, schemaCode: string, namespace: string): void {
+  upsertDocument(uri: string, ast: Document, schemaCode: string, namespace: string, packageName = ''): void {
     const existing = this.byDocument.get(uri);
     if (existing) {
       this.removeDocument(uri);
@@ -76,5 +76,35 @@ export class ProjectSymbolTable {
       }
     }
     return result;
+  }
+
+  getByPackage(packageName: string): SymbolEntry[] {
+    const result: SymbolEntry[] = [];
+    for (const entry of this.all()) {
+      if (entry.packageName === packageName) {
+        result.push(entry);
+      }
+    }
+    return result;
+  }
+
+  getBySuffix(suffix: string): SymbolEntry[] {
+    const result: SymbolEntry[] = [];
+    for (const entries of this.byQname.values()) {
+      for (const entry of entries) {
+        if (entry.qname.endsWith(`.${suffix}`) || entry.qname === suffix) {
+          result.push(entry);
+        }
+      }
+    }
+    return result;
+  }
+
+  listPackages(): string[] {
+    const packages = new Set<string>();
+    for (const entry of this.all()) {
+      packages.add(entry.packageName);
+    }
+    return Array.from(packages).sort();
   }
 }

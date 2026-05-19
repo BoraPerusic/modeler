@@ -225,8 +225,15 @@ export class ProjectSymbolTable {
 
 For each `Definition` in a `Document` with `packageDecl?.name = P`, the qname is:
 
-- If `P === ""` (default package): `<schema>.<namespace-or-kind>.<defName>[.<subDef>]` (v1 shape, unchanged)
+- If `P === ""` (default package): `<schema>.<namespace-or-kind>.<defName>[.<subDef>]`
 - If `P !== ""`: `P.<schema>.<namespace-or-kind>.<defName>[.<subDef>]`
+
+**Note on v1 behavior.** This rule changes v1's qname shape for files without
+a `namespace` clause: v1 produced `<schema>.<defName>` (e.g. `db.users`), v1.1
+produces `<schema>.<kind>.<defName>` (e.g. `db.table.users`). Files that
+declared an explicit `namespace` are unaffected. The migration tool (1.1.F)
+writes namespace clauses where they were absent, but pre-migration files still
+parse and resolve under the new rule.
 
 For the stock `cnc` package per open question #10 resolution (B.3): accept the doubled `cnc.cnc.role.fact` form for v1.1; revisit when the conceptual model lands. Document this in the contracts doc changelog when it ships.
 
@@ -705,6 +712,7 @@ export interface CreateGraphWizardProps {
 
 ## 12. Changelog
 
+- **v4, 2026-05-19** — clarified §3.1: removed the "(v1 shape, unchanged)" parenthetical, which was inaccurate. v1.1's qname construction always uses the kind as namespace fallback when no `namespace` clause is present; this changes the shape for unpackaged, no-namespace files (e.g. `db.users` → `db.table.users`). Stock-cnc doubling rule unchanged.
 - **v3, 2026-05-19** — relaxed GraphLayout.viewport.displayMode in §2 from the three-member union to string; the union narrowing now happens in semantics, not parsing. Designer's DisplayMode in §11.2 unchanged.
 - **v2, 2026-05-18** — added §11 (Designer state types) reflecting the locked schema-toggle-removed decision; added `ttr/graph-objects-empty` and `ttr/graph-name-mismatch` to §6.
 - **v1, 2026-05-18** — initial draft. All sections subject to amendment under the contract-amendment discipline (mini-task-lists never override; PRs against this file first).

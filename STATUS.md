@@ -17,8 +17,8 @@ Once dev complete, mark it "under review" in the list below, and notify the user
 
 [x] A grammar
 [x] B1 ast extension
-[ ] B2 symbol table
-[ ] B3 resover
+[x] B2 symbol table
+[x] B3 resolver
 [ ] B4 diagnostic
 [ ] C1 ttrg parsing
 [ ] C2 ttrg lsp methods

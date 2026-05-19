@@ -99,7 +99,7 @@ def table users {
       projectSymbols.upsertDocument('file:///file2.ttr', ast2, 'db', '');
 
       const dups = projectSymbols.duplicates();
-      expect(dups.some((d) => d.qname === 'db.users')).toBe(true);
+      expect(dups.some((d) => d.qname === 'db.table.users')).toBe(true);
     });
   });
 
@@ -113,11 +113,11 @@ def table users {
       const userAst = parseString(SIMPLE_STOCK_ENTITY, 'file:///project.ttr').ast!;
       projectSymbols.upsertDocument('file:///project.ttr', userAst, 'cnc', '');
 
-      const factEntry = projectSymbols.get('cnc.role.fact');
+      const factEntry = projectSymbols.get('cnc.cnc.role.fact');
       expect(factEntry).toBeDefined();
       expect(factEntry?.documentUri).toBe('stock://cnc-roles.ttr');
 
-      const orderEntry = projectSymbols.get('cnc.orders');
+      const orderEntry = projectSymbols.get('cnc.entity.orders');
       expect(orderEntry).toBeDefined();
       expect(orderEntry?.documentUri).toBe('file:///project.ttr');
     });
@@ -198,7 +198,7 @@ def table users {
     const entries = projectSymbols.all();
     expect(entries).toHaveLength(3);
 
-    const userTable = projectSymbols.get('db.users');
+    const userTable = projectSymbols.get('db.table.users');
     expect(userTable).toBeDefined();
     expect(userTable?.kind).toBe('table');
   });
@@ -259,6 +259,6 @@ def table users {
     projectSymbols.upsertDocument('file:///file2.ttr', ast2, 'db', '');
 
     const dups = projectSymbols.duplicates();
-    expect(dups.some((d) => d.qname === 'db.users')).toBe(true);
+    expect(dups.some((d) => d.qname === 'db.table.users')).toBe(true);
   });
 });

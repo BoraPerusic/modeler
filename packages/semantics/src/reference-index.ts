@@ -2,14 +2,20 @@ import type { Definition, Document, SourceLocation } from '@modeler/parser';
 import { collectAllReferences } from './references.js';
 import type { Resolver } from './resolver.js';
 
-function enclosingQnameOf(def: Definition, schemaCode: string, namespace: string): string | undefined {
+function enclosingQnameOf(def: Definition, schemaCode: string, namespace: string, packageName?: string): string | undefined {
   if (
     def.kind === 'entity' || def.kind === 'table' || def.kind === 'view' || def.kind === 'procedure' ||
     def.kind === 'relation' || def.kind === 'query' || def.kind === 'role' ||
     def.kind === 'er2dbEntity' || def.kind === 'er2dbAttribute' ||
     def.kind === 'er2dbRelation' || def.kind === 'er2cncRole'
   ) {
-    return [schemaCode, namespace, def.name].filter((s) => s !== '').join('.');
+    const nsOrKind = namespace || def.kind;
+    const segments: string[] = [];
+    if (packageName) segments.push(packageName);
+    segments.push(schemaCode);
+    if (nsOrKind) segments.push(nsOrKind);
+    segments.push(def.name);
+    return segments.join('.');
   }
   return undefined;
 }
@@ -36,16 +42,17 @@ export class ReferenceIndex {
     ast: Document,
     schemaCode: string,
     namespace: string,
-    resolver: Resolver
+    resolver: Resolver,
+    packageName?: string
   ): void {
     this.removeDocument(uri);
     const locations: ReferenceLocation[] = [];
 
     for (const { ref, ownerDef } of collectAllReferences(ast)) {
-      const referrerQname = enclosingQnameOf(ownerDef, schemaCode, namespace) ?? null;
+      const referrerQname = enclosingQnameOf(ownerDef, schemaCode, namespace, packageName) ?? null;
       const res = resolver.resolveReference(
         { path: ref.path, parts: ref.parts },
-        { schemaCode, namespace, enclosingQname: referrerQname ?? undefined }
+        { schemaCode, namespace, enclosingQname: referrerQname ?? undefined, packageName }
       );
       if (!res.resolved) continue;
       const loc: ReferenceLocation = {

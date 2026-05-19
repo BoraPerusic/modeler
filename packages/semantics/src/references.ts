@@ -62,6 +62,14 @@ function pushIdValueAsReference(
   if (!value) return;
   if (value.kind === 'id') {
     out.push({ path: value.path, parts: value.parts, source: value.source });
+  } else if (value.kind === 'list') {
+    for (const item of value.items) {
+      pushIdValueAsReference(item, out);
+    }
+  } else if (value.kind === 'object') {
+    for (const entry of value.entries) {
+      pushIdValueAsReference(entry.value, out);
+    }
   }
 }
 

@@ -1,5 +1,4 @@
 import type { SourceLocation, Document, Definition, EntityDef, TableDef, ProcedureDef, ViewDef, ColumnDef, IndexDef, ConstraintDef } from '@modeler/parser';
-import { qnameToString, buildQname, type Qname } from './qname.js';
 
 export interface SymbolEntry {
   qname: string;
@@ -8,6 +7,8 @@ export interface SymbolEntry {
   source: SourceLocation;
   documentUri: string;
   parent?: string;
+  packageName: string;
+  schemaCode: string;
 }
 
 export class DocumentSymbolTable {
@@ -15,20 +16,54 @@ export class DocumentSymbolTable {
   private documentUri: string;
   private schemaCode: string;
   private namespace: string;
+  private packageName: string;
 
   constructor(documentUri: string, ast: Document, schemaCode: string, namespace: string) {
     this.documentUri = documentUri;
     this.schemaCode = schemaCode;
     this.namespace = namespace;
+    this.packageName = ast.packageDecl?.name ?? '';
 
     for (const def of ast.definitions) {
       this.addEntry(def);
     }
   }
 
+  private get isStockCnc(): boolean {
+    return this.schemaCode === 'cnc' && !this.packageName && this.documentUri.startsWith('stock://');
+  }
+
+  private makeQname(parts: string[], namespaceOrKind: string): string {
+    // TODO(post-v1.1): the doubled `cnc.cnc.<ns-or-kind>.*` shape is a
+    // transitional accommodation per v1-1-contracts §3.1 (open-question #10).
+    // Revisit when the conceptual-model layer lands and we can model stock
+    // cnc as an actual package.
+    const segments: string[] = [];
+    if (this.packageName) segments.push(this.packageName);
+    if (this.isStockCnc) segments.push('cnc');
+    segments.push(this.schemaCode);
+    if (namespaceOrKind) segments.push(namespaceOrKind);
+    segments.push(...parts);
+    return segments.join('.');
+  }
+
+  private makeQnameChild(parentEntry: SymbolEntry, childName: string): string {
+    const segments: string[] = [];
+    if (this.packageName) segments.push(this.packageName);
+    if (this.isStockCnc) segments.push('cnc');
+    segments.push(this.schemaCode);
+    if (this.namespace) {
+      segments.push(this.namespace);
+    } else {
+      segments.push(parentEntry.kind);
+    }
+    segments.push(parentEntry.name, childName);
+    return segments.join('.');
+  }
+
   private addEntry(def: Definition, parentQname?: string): void {
-    const qname = buildQname(this.schemaCode, this.namespace, [def.name]);
-    const qnameStr = qnameToString(qname);
+    const nsOrKind = this.namespace || def.kind;
+    const qnameStr = this.makeQname([def.name], nsOrKind);
 
     const entry: SymbolEntry = {
       qname: qnameStr,
@@ -37,70 +72,76 @@ export class DocumentSymbolTable {
       source: def.source,
       documentUri: this.documentUri,
       parent: parentQname,
+      packageName: this.packageName,
+      schemaCode: this.schemaCode,
     };
 
     this.entries.set(qnameStr, entry);
 
     if (def.kind === 'entity' && def.attributes) {
-      const entityQname = qnameStr;
+      const entityEntry = entry;
       for (const attr of def.attributes) {
-        const attrQname = buildQname(this.schemaCode, this.namespace, [def.name, attr.name]);
-        const attrQnameStr = qnameToString(attrQname);
+        const attrQnameStr = this.makeQnameChild(entityEntry, attr.name);
         this.entries.set(attrQnameStr, {
           qname: attrQnameStr,
           kind: 'attribute',
           name: attr.name,
           source: attr.source,
           documentUri: this.documentUri,
-          parent: entityQname,
+          parent: entityEntry.qname,
+          packageName: this.packageName,
+          schemaCode: this.schemaCode,
         });
       }
     }
 
     if (def.kind === 'table' && def.columns) {
-      const tableQname = qnameStr;
+      const tableEntry = entry;
       for (const col of def.columns) {
-        const colQname = buildQname(this.schemaCode, this.namespace, [def.name, col.name]);
-        const colQnameStr = qnameToString(colQname);
+        const colQnameStr = this.makeQnameChild(tableEntry, col.name);
         this.entries.set(colQnameStr, {
           qname: colQnameStr,
           kind: 'column',
           name: col.name,
           source: col.source,
           documentUri: this.documentUri,
-          parent: tableQname,
+          parent: tableEntry.qname,
+          packageName: this.packageName,
+          schemaCode: this.schemaCode,
         });
       }
     }
 
     if (def.kind === 'view' && def.columns) {
-      const viewQname = qnameStr;
+      const viewEntry = entry;
       for (const col of def.columns) {
-        const colQname = buildQname(this.schemaCode, this.namespace, [def.name, col.name]);
-        const colQnameStr = qnameToString(colQname);
+        const colQnameStr = this.makeQnameChild(viewEntry, col.name);
         this.entries.set(colQnameStr, {
           qname: colQnameStr,
           kind: 'column',
           name: col.name,
           source: col.source,
           documentUri: this.documentUri,
-          parent: viewQname,
+          parent: viewEntry.qname,
+          packageName: this.packageName,
+          schemaCode: this.schemaCode,
         });
       }
     }
 
     if (def.kind === 'procedure' && def.resultColumns) {
-      const procQname = qnameStr;
+      const procEntry = entry;
       for (const col of def.resultColumns) {
-        const colQname = buildQname(this.schemaCode, this.namespace, [def.name, col.name]);
-        const colQnameStr = qnameToString(colQname);
+        const colQnameStr = this.makeQnameChild(procEntry, col.name);
         this.entries.set(colQnameStr, {
           qname: colQnameStr,
           kind: 'column',
           name: col.name,
           source: col.source,
           documentUri: this.documentUri,
-          parent: procQname,
+          parent: procEntry.qname,
+          packageName: this.packageName,
+          schemaCode: this.schemaCode,
         });
       }
     }

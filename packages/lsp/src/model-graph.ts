@@ -425,13 +425,14 @@ function findDefByQname(
   if (!result.ast) return null;
   const parts = qname.split('.');
   const schemaCode = parts[0] ?? 'db';
-  const namespace = parts.length === 2 ? '' : (parts[1] ?? '');
+  const qnameNamespace = parts.length === 2 ? '' : (parts[1] ?? '');
   const name = parts.length === 2 ? parts[1] : parts.slice(2).join('.');
   for (const def of result.ast.definitions) {
     if (def.name === name && def.kind !== 'fk') {
       const defSchema = result.ast.schemaDirective?.schemaCode ?? 'db';
       const defNamespace = result.ast.schemaDirective?.namespace ?? '';
-      if (defSchema === schemaCode && defNamespace === namespace) return def;
+      const nsOrKind = defNamespace || def.kind;
+      if (defSchema === schemaCode && nsOrKind === qnameNamespace) return def;
     }
   }
   return null;

@@ -44,7 +44,7 @@ describe('Resolver.resolveReference (dotted)', () => {
     expect(res.resolved).toBe(false);
     if (!res.resolved) {
       expect(res.tried.length).toBeGreaterThan(0);
-      expect(res.tried[0]).toContain('nonexistent');
+      expect(res.tried[0].candidate).toContain('nonexistent');
     }
   });
 
@@ -81,7 +81,10 @@ describe('Resolver.resolveBareId', () => {
     if (res.resolved) expect(res.symbol.qname).toBe('er.entity.artikl.nazev');
   });
 
-  it('falls through to stock cnc.role.<name> when the bare id matches one', () => {
+  // TODO(B3): Stock cnc qname doubled to cnc.cnc.role.* in B2; resolver
+  // resolveBareId still looks for cnc.role.* (line 95). B3 updates the resolver's
+  // stock-cnc fallback to match the doubled form.
+  it('falls through to stock cnc.cnc.role.<name> when the bare id matches one', () => {
     const stock = parseString(
       `schema cnc namespace role
        def role fact { description: "fact" }`,
@@ -93,7 +96,7 @@ describe('Resolver.resolveBareId', () => {
     const resolver = new Resolver(table);
     const res = resolver.resolveBareId('fact', { schemaCode: 'er', namespace: 'entity' });
     expect(res.resolved).toBe(true);
-    if (res.resolved) expect(res.symbol.qname).toBe('cnc.role.fact');
+    if (res.resolved) expect(res.symbol.qname).toBe('cnc.cnc.role.fact');
   });
 
   it('returns not-found when the bare id resolves nowhere', () => {

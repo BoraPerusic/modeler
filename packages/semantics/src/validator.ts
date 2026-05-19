@@ -152,7 +152,7 @@ export class Validator {
         diagnostics.push({
           code: DiagnosticCode.UnresolvedReference,
           severity: this.manifest.lint.strict ? 'error' : 'warning',
-          message: `Unresolved reference: '${ref.path}' (tried ${res.tried.join(', ')})`,
+          message: `Unresolved reference: '${ref.path}' (tried ${res.tried.map((a) => a.candidate).join(', ')})`,
           source: ref.source,
         });
       }
