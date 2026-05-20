@@ -1,5 +1,5 @@
-package pkg_a
-import pkg_b.some_entity
-import pkg_b.some_entity
+package pkg_dupimport
+import pkg_b.*
+import pkg_b.*
 schema er namespace entity
 def entity artikl { attributes: [def attribute id { type: int }] }

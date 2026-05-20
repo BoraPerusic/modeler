@@ -1,9 +1,10 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { parseFile } from '@modeler/parser';
+import { parseFile, parseString } from '@modeler/parser';
 import * as lsp from 'vscode-languageserver/node';
 import { PassThrough } from 'stream';
 import { createServerConnection } from '@modeler/lsp/server';
 import { DiagnosticCode } from '@modeler/parser';
+import { ProjectSymbolTable, Resolver, Validator, resolveManifest, PackageGraphBuilder } from '@modeler/semantics';
 import path from 'path';
 
 const samplesDir = path.resolve(__dirname, '../../../samples');
@@ -23,6 +24,76 @@ async function getAllTtrFiles(dir: string, excludeDirs: string[] = []): Promise<
     }
   }
   return results;
+}
+
+// Walk a directory for both .ttr and .ttrg files (getAllTtrFiles ignores .ttrg).
+async function getAllModelerFiles(dir: string, excludeDirs: string[] = []): Promise<string[]> {
+  const results: string[] = [];
+  const fs = await import('fs/promises');
+  for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (excludeDirs.includes(entry.name)) continue;
+      results.push(...await getAllModelerFiles(fullPath, excludeDirs));
+    } else if (entry.isFile() && (entry.name.endsWith('.ttr') || entry.name.endsWith('.ttrg'))) {
+      results.push(fullPath);
+    }
+  }
+  return results;
+}
+
+/**
+ * Load every file under `rootDir` (minus `excludeDirs`) as one project rooted
+ * at `rootDir`, run the full validator pipeline + parser, and return a map of
+ * relative-path -> the set of diagnostic codes attributed to that file's URI.
+ * This is the B7 guardrail: it proves each broken fixture emits exactly the
+ * code it advertises, with no parse errors or spurious extras.
+ */
+async function collectFixtureCodes(rootDir: string, excludeDirs: string[] = []): Promise<Map<string, Set<string>>> {
+  const fs = await import('fs/promises');
+  const root = rootDir.endsWith('/') ? rootDir : rootDir + '/';
+  const files = await getAllModelerFiles(rootDir, excludeDirs);
+
+  const symbols = new ProjectSymbolTable();
+  const asts = new Map<string, { ast: NonNullable<Awaited<ReturnType<typeof parseFile>>['ast']>; errors: Array<{ code: string }> }>();
+  for (const file of files) {
+    const uri = `file://${file}`;
+    const result = parseString(await fs.readFile(file, 'utf-8'), uri);
+    if (!result.ast) continue;
+    asts.set(uri, { ast: result.ast, errors: result.errors });
+    symbols.upsertDocument(
+      uri,
+      result.ast,
+      result.ast.schemaDirective?.schemaCode ?? 'db',
+      result.ast.schemaDirective?.namespace ?? '',
+      result.ast.packageDecl?.name ?? '',
+    );
+  }
+
+  const validator = new Validator(symbols, new Resolver(symbols), resolveManifest(undefined, root));
+  const packageGraph = new PackageGraphBuilder(
+    symbols,
+    new Map([...asts].map(([uri, v]) => [uri, v.ast])),
+  ).build();
+
+  const byFile = new Map<string, Set<string>>();
+  for (const file of files) {
+    const uri = `file://${file}`;
+    const entry = asts.get(uri);
+    if (!entry) continue;
+    const codes = new Set<string>();
+    for (const e of entry.errors) codes.add(e.code);
+    for (const d of validator.validateDocument(uri, entry.ast)) codes.add(d.code);
+    for (const d of validator.validateReferences(uri, entry.ast)) codes.add(d.code);
+    for (const d of validator.validateImports(uri, entry.ast)) codes.add(d.code);
+    for (const d of validator.validateFileOrdering(uri, entry.ast)) codes.add(d.code);
+    for (const d of validator.validatePackageDeclarations(uri, entry.ast)) codes.add(d.code);
+    if (uri.endsWith('.ttrg')) for (const d of validator.validateTtrgGraph(uri, entry.ast)) codes.add(d.code);
+    for (const d of validator.validateCircularDependencies(packageGraph)) if (d.source.file === uri) codes.add(d.code);
+    for (const d of validator.validateProject()) if (d.source.file === uri) codes.add(d.code);
+    byFile.set(path.relative(root, file), codes);
+  }
+  return byFile;
 }
 
 function createPairedConnection(): { client: lsp.Connection; server: lsp.Connection } {
@@ -60,21 +131,62 @@ describe('parser integration', () => {
     brokenFiles = await getAllTtrFiles(brokenDir, ['v1.1']);
   });
 
-  // B7 guardrail: targeted fixture tests — these verify each v1.1 broken fixture
-  // emits exactly its intended diagnostic code, not parse errors or spurious extras.
-  // Fixtures needing cross-file context (circular, ambiguous-reference, unimported-
-  // reference) are covered by semantics unit tests, not here.
+  // B7 guardrail: every v1.1 broken fixture must emit EXACTLY its advertised
+  // diagnostic — no ttr/parse-error, no spurious extras. The whole-dir fixtures
+  // are loaded as one project (excluding circular/, which is its own project
+  // root); each fixture uses a unique package so they don't collide.
   describe('v1.1 broken fixture diagnostics', () => {
-    function codesFrom(result: { errors: Array<{ code: string }> }): string[] {
-      return result.errors.map(e => e.code);
+    let codes: Map<string, Set<string>>;
+
+    beforeAll(async () => {
+      codes = await collectFixtureCodes(path.join(brokenDir, 'v1.1'), ['circular']);
+    });
+
+    // file -> exact expected code set
+    const cases: Array<[string, string[]]> = [
+      ['unimported-reference.ttr', ['ttr/unimported-reference']],
+      ['unused-import.ttr', ['ttr/unused-import']],
+      ['wildcard-with-no-matches.ttr', ['ttr/wildcard-with-no-matches']],
+      ['duplicate-import.ttr', ['ttr/duplicate-import']],
+      ['wrong-file-kind.ttr', ['ttr/wrong-file-kind']],
+      ['ambiguous-reference.ttr', ['ttr/ambiguous-reference']],
+      ['pkg_a/package-declaration-mismatch.ttr', ['ttr/package-declaration-mismatch']],
+      ['pkg_a/sub/missing-package-declaration.ttr', ['ttr/missing-package-declaration']],
+      ['graph_object_not_found.ttrg', ['ttr/graph-object-not-found']],
+      ['graph_objects_empty.ttrg', ['ttr/graph-objects-empty']],
+      ['graph_name_mismatch.ttrg', ['ttr/graph-name-mismatch']],
+    ];
+
+    for (const [file, expected] of cases) {
+      it(`${file} emits exactly ${expected.join(', ')}`, () => {
+        const got = codes.get(file) ?? new Set<string>();
+        expect(got, `${file} got: [${[...got].join(', ')}]`).toEqual(new Set(expected));
+      });
     }
 
-    it('wrong-file-kind.ttr emits only ttr/wrong-file-kind', async () => {
-      const file = path.join(brokenDir, 'v1.1/wrong-file-kind.ttr');
-      const result = await parseFile(file);
-      const codes = codesFrom(result);
-      expect(codes, `got: ${codes.join(', ')}`).toEqual(['ttr/wrong-file-kind']);
+    it('loading the whole v1.1 dir produces no duplicate-definition', () => {
+      const all = [...codes.values()].flatMap((s) => [...s]);
+      expect(all).not.toContain('ttr/duplicate-definition');
     });
+
+    it('package-declaration-mismatch fires only on its intended fixture', () => {
+      const offenders = [...codes.entries()]
+        .filter(([, s]) => s.has('ttr/package-declaration-mismatch'))
+        .map(([f]) => f);
+      expect(offenders).toEqual(['pkg_a/package-declaration-mismatch.ttr']);
+    });
+
+    it('circular/ as its own project emits ttr/circular-package-dependency', async () => {
+      const circ = await collectFixtureCodes(path.join(brokenDir, 'v1.1/circular'), []);
+      const all = [...circ.values()].flatMap((s) => [...s]);
+      expect(all, `circular codes: ${all.join(', ')}`).toContain('ttr/circular-package-dependency');
+    });
+
+    // N/A fixtures: documented in samples/broken/v1.1/README.md as not emittable
+    // under the order-strict grammar (file-ordering) / the IDENT-keyed layout
+    // grammar (graph-layout-stale-node). They parse-error by design until C1.
+    it.skip('file-ordering.ttr — N/A (order-strict grammar; see README)', () => {});
+    it.skip('graph-layout-stale-node.ttrg — N/A (layout needs qname keys; C1)', () => {});
   });
 
   it('parses all sample files (non-broken) without errors', async () => {

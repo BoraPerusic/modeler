@@ -1,3 +1,0 @@
-package pkg_b1
-schema er namespace entity
-def entity shared_name { attributes: [def attribute id { type: int }] }
