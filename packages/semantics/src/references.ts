@@ -1,6 +1,7 @@
 import type {
   Definition,
   Document,
+  ImportDecl,
   PropertyValue,
   Reference,
 } from '@modeler/parser';
@@ -122,4 +123,10 @@ export function nestedDefs(def: Definition): Definition[] {
       break;
   }
   return out;
+}
+
+export function packageOfImport(imp: ImportDecl): string {
+  if (imp.wildcard) return imp.target;
+  const parts = imp.target.split('.');
+  return parts.length >= 2 ? parts.slice(0, -1).join('.') : '';
 }

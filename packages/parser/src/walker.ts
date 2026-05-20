@@ -52,7 +52,6 @@ import {
   PackageDeclContext,
   ImportDeclContext,
   GraphBlockContext,
-  GraphPropertyContext,
 } from './generated/TTRParser.js';
 import type {
   SourceLocation,

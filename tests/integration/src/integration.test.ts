@@ -53,7 +53,28 @@ describe('parser integration', () => {
 
   beforeAll(async () => {
     sampleFiles = await getAllTtrFiles(samplesDir, ['broken']);
-    brokenFiles = await getAllTtrFiles(brokenDir);
+    // v1.1 broken fixtures are excluded from the parse-error sweep above because
+    // many are *intentionally* malformed (wrong order, wrong kinds, etc.) and
+    // would fail that test. They are covered by the targeted tests below and by
+    // the semantics unit-test suite (diagnostics-v1.1.test.ts).
+    brokenFiles = await getAllTtrFiles(brokenDir, ['v1.1']);
+  });
+
+  // B7 guardrail: targeted fixture tests — these verify each v1.1 broken fixture
+  // emits exactly its intended diagnostic code, not parse errors or spurious extras.
+  // Fixtures needing cross-file context (circular, ambiguous-reference, unimported-
+  // reference) are covered by semantics unit tests, not here.
+  describe('v1.1 broken fixture diagnostics', () => {
+    function codesFrom(result: { errors: Array<{ code: string }> }): string[] {
+      return result.errors.map(e => e.code);
+    }
+
+    it('wrong-file-kind.ttr emits only ttr/wrong-file-kind', async () => {
+      const file = path.join(brokenDir, 'v1.1/wrong-file-kind.ttr');
+      const result = await parseFile(file);
+      const codes = codesFrom(result);
+      expect(codes, `got: ${codes.join(', ')}`).toEqual(['ttr/wrong-file-kind']);
+    });
   });
 
   it('parses all sample files (non-broken) without errors', async () => {
@@ -284,6 +305,26 @@ def er2cnc_role x {
     const diags = await diagnosticsPromise;
     const codes = diags.diagnostics.map((d) => d.code);
     expect(codes).toContain('ttr/unresolved-reference');
+  });
+
+  it('wrong-file-kind: .ttr file containing graph block emits ttr/wrong-file-kind error', async () => {
+    const wrongKindUri = 'file:///wrong-kind.ttr';
+    const wrongKindText = `graph my_graph { schema: er }
+def entity artikl { attributes: [def attribute id { type: int }] }`;
+    const diagnosticsPromise = new Promise<lsp.PublishDiagnosticsParams>((resolve) => {
+      const off = client.onNotification('textDocument/publishDiagnostics', (params) => {
+        if ((params as lsp.PublishDiagnosticsParams).uri === wrongKindUri) {
+          off.dispose();
+          resolve(params as lsp.PublishDiagnosticsParams);
+        }
+      });
+    });
+    client.sendNotification('textDocument/didOpen', {
+      textDocument: { uri: wrongKindUri, languageId: 'ttr', version: 1, text: wrongKindText },
+    });
+    const diags = await diagnosticsPromise;
+    const codes = diags.diagnostics.map((d) => d.code);
+    expect(codes, `got: ${codes.join(', ')}`).toContain('ttr/wrong-file-kind');
   });
 
   it('with stock vocab loaded, resolveBareId("fact") via the server resolves to cnc.role.fact', async () => {

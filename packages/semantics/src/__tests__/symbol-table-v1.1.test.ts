@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { parseString } from '@modeler/parser';
 import { DocumentSymbolTable } from '../symbol-table.js';
 import { ProjectSymbolTable } from '../project-symbols.js';

@@ -12,7 +12,7 @@ export type { ResolutionResult, LexicalScope, ResolutionStep, ResolutionAttempt 
 export { Validator } from './validator.js';
 export type { ValidationDiagnostic } from './validator.js';
 export { collectReferences, collectAllReferences, nestedDefs } from './references.js';
-export { ReferenceIndex } from './reference-index.js';
+export { ReferenceIndex, enclosingQnameOf } from './reference-index.js';
 export type { ReferenceLocation } from './reference-index.js';
 export { PackageGraphBuilder } from './package-graph.js';
 export type { PackageGraph, PackageNode, PackageEdge } from './package-graph.js';

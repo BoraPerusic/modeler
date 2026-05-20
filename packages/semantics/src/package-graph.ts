@@ -1,5 +1,6 @@
 import type { Document, ImportDecl } from '@modeler/parser';
 import { ProjectSymbolTable } from './project-symbols.js';
+import { packageOfImport } from './references.js';
 
 export interface PackageNode {
   name: string;
@@ -15,6 +16,68 @@ export interface PackageEdge {
 export interface PackageGraph {
   nodes: PackageNode[];
   edges: PackageEdge[];
+}
+
+export function findCyclesOn(graph: PackageGraph): string[][] {
+  const packages = graph.nodes.map((n) => n.name);
+  const indexByPkg = new Map<string, number>();
+  for (let i = 0; i < packages.length; i++) indexByPkg.set(packages[i], i);
+  const n = packages.length;
+
+  const adjacency: number[][] = Array.from({ length: n }, () => []);
+  for (const edge of graph.edges) {
+    const fromIdx = indexByPkg.get(edge.from);
+    const toIdx = indexByPkg.get(edge.to);
+    if (fromIdx !== undefined && toIdx !== undefined) {
+      adjacency[fromIdx].push(toIdx);
+    }
+  }
+
+  let idx = 0;
+  const stack: number[] = [];
+  const onStack = new Set<number>();
+  const tarjanNodes: TarjanNode[] = Array.from({ length: n }, () => ({
+    index: -1,
+    lowlink: 0,
+    onStack: false,
+  }));
+
+  function strongConnect(v: number, sccs: number[][]): void {
+    tarjanNodes[v].index = idx;
+    tarjanNodes[v].lowlink = idx;
+    idx++;
+    stack.push(v);
+    onStack.add(v);
+
+    for (const w of adjacency[v]) {
+      if (tarjanNodes[w].index === -1) {
+        strongConnect(w, sccs);
+        tarjanNodes[v].lowlink = Math.min(tarjanNodes[v].lowlink, tarjanNodes[w].lowlink);
+      } else if (onStack.has(w)) {
+        tarjanNodes[v].lowlink = Math.min(tarjanNodes[v].lowlink, tarjanNodes[w].index);
+      }
+    }
+
+    if (tarjanNodes[v].lowlink === tarjanNodes[v].index) {
+      const scc: number[] = [];
+      let w: number;
+      do {
+        w = stack.pop()!;
+        onStack.delete(w);
+        scc.push(w);
+      } while (w !== v);
+      sccs.push(scc);
+    }
+  }
+
+  const sccs: number[][] = [];
+  for (let v = 0; v < n; v++) {
+    if (tarjanNodes[v].index === -1) strongConnect(v, sccs);
+  }
+
+  return sccs
+    .filter((scc) => scc.length > 1)
+    .map((scc) => scc.map((i) => packages[i]));
 }
 
 interface TarjanNode {
@@ -96,8 +159,6 @@ export class PackageGraphBuilder {
     let idx = 0;
     const stack: number[] = [];
     const onStack = new Set<number>();
-    const indices = new Array<number>(n).fill(-1);
-    const lowlinks = new Array<number>(n).fill(0);
     const tarjanNodes: TarjanNode[] = Array.from({ length: n }, () => ({
       index: -1,
       lowlink: 0,
@@ -182,12 +243,6 @@ export class PackageGraphBuilder {
   }
 
   private resolvePackageOfImport(imp: ImportDecl): string | undefined {
-    const target = imp.target;
-    if (!imp.wildcard) {
-      const parts = target.split('.');
-      if (parts.length >= 2) return parts.slice(0, -1).join('.');
-      return '';
-    }
-    return target;
+    return packageOfImport(imp) || undefined;
   }
 }

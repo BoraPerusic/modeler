@@ -1,0 +1,5 @@
+package pkg_a
+import pkg_b.*
+schema er namespace entity
+def entity artikl { attributes: [def attribute id { type: int }] }
+def er2db_relation r { relation: pkg_b.er.entity.some_rel }

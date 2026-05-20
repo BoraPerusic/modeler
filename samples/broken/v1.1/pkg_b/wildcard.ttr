@@ -1,0 +1,3 @@
+package pkg_b
+schema er namespace entity
+def entity some_rel { attributes: [def attribute id { type: int }] }

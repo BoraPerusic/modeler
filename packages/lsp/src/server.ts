@@ -33,6 +33,7 @@ import {
   nestedDefs,
   ReferenceIndex,
   PackageGraphBuilder,
+  enclosingQnameOf,
   type ResolvedManifest,
   type ValidationDiagnostic,
   type PackageGraph,
@@ -153,21 +154,6 @@ export function createServerConnection(
     return [schemaCode, namespace, def.name].filter((s) => s !== '').join('.');
   }
 
-  function enclosingQnameOf(def: Definition, ast: Document): string | undefined {
-    if (
-      def.kind === 'entity' || def.kind === 'table' || def.kind === 'view' ||
-      def.kind === 'procedure' || def.kind === 'relation' || def.kind === 'role' ||
-      def.kind === 'er2dbEntity' || def.kind === 'er2dbAttribute' ||
-      def.kind === 'er2dbRelation' || def.kind === 'er2cncRole'
-    ) {
-      const schemaCode = ast.schemaDirective?.schemaCode ?? 'db';
-      const namespace = ast.schemaDirective?.namespace ?? '';
-      const nsOrKind = namespace || def.kind;
-      return [schemaCode, nsOrKind, def.name].filter((s) => s !== '').join('.');
-    }
-    return undefined;
-  }
-
   function symbolKindOf(kind: string): SymbolKind {
     if (kind === 'entity' || kind === 'table' || kind === 'view') return SymbolKind.Class;
     if (kind === 'column' || kind === 'attribute') return SymbolKind.Field;
@@ -184,8 +170,9 @@ export function createServerConnection(
     return result.ast;
   }
 
-  function rebuildValidator(): void {
+  function rebuildValidator(projectRoot?: string): void {
     resolver = new Resolver(projectSymbols);
+    if (projectRoot) manifest.projectRoot = projectRoot;
     validator = new Validator(projectSymbols, resolver, manifest);
     packageGraph = null;
   }
@@ -215,10 +202,17 @@ export function createServerConnection(
     }));
 
     if (result.ast) {
+      const pkgGraph = getPackageGraph();
+
       const structural = validator.validateDocument(uri, result.ast);
       const refs = validator.validateReferences(uri, result.ast);
+      const importsDiags = validator.validateImports(uri, result.ast);
+      const fileOrdering = validator.validateFileOrdering(uri, result.ast);
+      const packageDiags = validator.validatePackageDeclarations(uri, result.ast);
+      const graphDiags = uri.endsWith('.ttrg') ? validator.validateTtrgGraph(uri, result.ast) : [];
+      const circularDiags = validator.validateCircularDependencies(pkgGraph).filter((d) => d.source.file === uri);
       const project = validator.validateProject().filter((d) => d.source.file === uri);
-      for (const d of [...structural, ...refs, ...project]) {
+      for (const d of [...structural, ...refs, ...importsDiags, ...fileOrdering, ...packageDiags, ...graphDiags, ...circularDiags, ...project]) {
         diagnostics.push(toLspDiagnostic(d));
       }
     }
@@ -284,17 +278,24 @@ export function createServerConnection(
     // nothing yet
   });
 
-  connection.onInitialize(async (_params: InitializeParams): Promise<InitializeResult> => {
+  connection.onInitialize(async (params: InitializeParams): Promise<InitializeResult> => {
     if (opts.loadStock) {
       try {
         const docs = await opts.loadStock();
         for (const d of docs) {
           projectSymbols.upsertDocument(d.uri, d.ast, d.schemaCode, d.namespace, '');
         }
-        rebuildValidator();
       } catch {
         // stock loading is best-effort
       }
+    }
+    const wsUri = params.workspaceFolders?.[0]?.uri
+      ?? params.rootUri
+      ?? (params.rootPath ? `file://${params.rootPath}` : null);
+    if (wsUri) {
+      const projectRoot = wsUri.startsWith('file://') ? new URL(wsUri).pathname : wsUri;
+      manifest = resolveManifest(undefined, projectRoot);
+      rebuildValidator(projectRoot);
     }
     return {
       capabilities: {
@@ -443,12 +444,11 @@ export function createServerConnection(
 
     const schemaCode = ast.schemaDirective?.schemaCode ?? 'db';
     const namespace = ast.schemaDirective?.namespace ?? '';
-    const packageName = ast.packageDecl?.name ?? '';
 
     if (found.kind === 'ref') {
       const res = resolver.resolveReference(
         { path: found.ref.path, parts: found.ref.parts },
-        { schemaCode, namespace, enclosingQname: enclosingQnameOf(found.from, ast), packageName }
+        { schemaCode, namespace, enclosingQname: enclosingQnameOf(found.from, schemaCode, namespace, ast.packageDecl?.name ?? ''), packageName: ast.packageDecl?.name ?? '' }
       );
       if (!res.resolved) return null;
       return {
@@ -485,7 +485,7 @@ export function createServerConnection(
     if (found.kind === 'ref') {
       const res = resolver.resolveReference(
         { path: found.ref.path, parts: found.ref.parts },
-        { schemaCode, namespace, enclosingQname: enclosingQnameOf(found.from, ast) }
+        { schemaCode, namespace, enclosingQname: enclosingQnameOf(found.from, schemaCode, namespace, ast.packageDecl?.name ?? ''), packageName: ast.packageDecl?.name ?? '' }
       );
       if (res.resolved) targetQname = res.symbol.qname;
     } else {
@@ -536,7 +536,7 @@ export function createServerConnection(
     if (found.kind === 'ref') {
       const res = resolver.resolveReference(
         { path: found.ref.path, parts: found.ref.parts },
-        { schemaCode, namespace, enclosingQname: enclosingQnameOf(found.from, ast) }
+        { schemaCode, namespace, enclosingQname: enclosingQnameOf(found.from, schemaCode, namespace, ast.packageDecl?.name ?? ''), packageName: ast.packageDecl?.name ?? '' }
       );
       if (!res.resolved) return null;
       qname = res.symbol.qname;
@@ -584,17 +584,35 @@ export function createServerConnection(
       limit: 100,
     });
 
-    return scored.map((entry) => {
-      const symbol = entry.obj;
-      return {
-        name: symbol.qname,
-        kind: symbolKindOf(symbol.kind),
-        location: {
-          uri: symbol.documentUri,
-          range: sourceLocationToRange(symbol.source),
-        },
-      };
-    }) satisfies SymbolInformation[];
+    // Kind-name boost: when the query is a prefix of a definition kind (e.g.
+    // "rel" -> "relation"), float every symbol of that kind, drawn from the
+    // *full* index, above the fuzzy matches. fuzzysort only searches qname and
+    // name, so a kind-name query would otherwise be drowned out: "rel" matches
+    // the 111 `er2dbRelation` qnames and saturates the limit before any
+    // `relation`-kind def (whose qname is `er.entity.<name>`, no "rel"
+    // substring) is ever reached. Gated at 3+ chars so short name-fragment
+    // queries aren't hijacked by an accidental kind prefix.
+    const queryLower = query.toLowerCase();
+    const isKindQuery = (kind: string): boolean => {
+      const k = kind.toLowerCase();
+      return k === queryLower || k.startsWith(queryLower);
+    };
+    const kindMatched =
+      query.length >= 3 ? allSymbols.filter((s) => isKindQuery(s.kind)) : [];
+    const seen = new Set(kindMatched.map((s) => s.qname));
+    const results =
+      kindMatched.length > 0
+        ? [...kindMatched, ...scored.map((e) => e.obj).filter((s) => !seen.has(s.qname))].slice(0, 100)
+        : scored.map((e) => e.obj).slice(0, 100);
+
+    return results.map((symbol) => ({
+      name: symbol.qname,
+      kind: symbolKindOf(symbol.kind),
+      location: {
+        uri: symbol.documentUri,
+        range: sourceLocationToRange(symbol.source),
+      },
+    })) satisfies SymbolInformation[];
   });
 
   /**

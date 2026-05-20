@@ -105,7 +105,9 @@ idPart
 
 ### 1.4 File ordering (decision from open-question #1)
 
-The canonical file ordering is **Java-style**: `package` → `import`s → `schemaDirective` (or `graphBlock` for `.ttrg`) → definitions. The grammar permits all permutations the productions allow, but the validator emits `ttr/file-ordering` (Warning) when imports follow `schemaDirective` or definitions, and migration tooling produces canonical-order output.
+The canonical file ordering is **Java-style**: `package` → `import`s → `schemaDirective` (or `graphBlock` for `.ttrg`) → definitions.
+
+The grammar is **order-strict** (`packageDecl? importDecl* (schemaDirective | graphBlock)? definition* EOF`). Out-of-order tokens produce `ttr/parse-error`, not `ttr/file-ordering`. `ttr/file-ordering` exists as a placeholder for tooling (e.g. a future formatter) that operates on a permissive AST builder; it is not currently emittable from regular parsing of v1.1 source files.
 
 ---
 

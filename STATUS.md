@@ -19,7 +19,7 @@ Once dev complete, mark it "under review" in the list below, and notify the user
 [x] B1 ast extension
 [x] B2 symbol table
 [x] B3 resolver
-[ ] B4 diagnostic
+[x] B4 diagnostic
 [ ] C1 ttrg parsing
 [ ] C2 ttrg lsp methods
 [ ] D vscode ext

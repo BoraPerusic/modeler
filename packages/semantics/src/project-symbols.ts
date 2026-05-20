@@ -5,7 +5,7 @@ export class ProjectSymbolTable {
   private byDocument: Map<string, DocumentSymbolTable> = new Map();
   private byQname: Map<string, SymbolEntry[]> = new Map();
 
-  upsertDocument(uri: string, ast: Document, schemaCode: string, namespace: string, packageName = ''): void {
+  upsertDocument(uri: string, ast: Document, schemaCode: string, namespace: string, _packageName = ''): void {
     const existing = this.byDocument.get(uri);
     if (existing) {
       this.removeDocument(uri);

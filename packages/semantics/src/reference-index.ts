@@ -2,7 +2,7 @@ import type { Definition, Document, SourceLocation } from '@modeler/parser';
 import { collectAllReferences } from './references.js';
 import type { Resolver } from './resolver.js';
 
-function enclosingQnameOf(def: Definition, schemaCode: string, namespace: string, packageName?: string): string | undefined {
+export function enclosingQnameOf(def: Definition, schemaCode: string, namespace: string, packageName?: string): string | undefined {
   if (
     def.kind === 'entity' || def.kind === 'table' || def.kind === 'view' || def.kind === 'procedure' ||
     def.kind === 'relation' || def.kind === 'query' || def.kind === 'role' ||

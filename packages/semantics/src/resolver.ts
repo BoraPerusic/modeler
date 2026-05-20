@@ -54,7 +54,7 @@ export interface ResolutionContext {
   packageName?: string;
 }
 
-const SCHEMA_CODES = ['db', 'er', 'map', 'query', 'cnc'];
+
 
 function attempt(step: ResolutionStep, candidate: string, reason?: ResolutionAttempt['reason']): ResolutionAttempt {
   return { step, candidate, reason };

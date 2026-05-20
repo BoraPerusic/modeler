@@ -1,4 +1,4 @@
-import type { SourceLocation, Document, Definition, EntityDef, TableDef, ProcedureDef, ViewDef, ColumnDef, IndexDef, ConstraintDef } from '@modeler/parser';
+import type { SourceLocation, Document, Definition } from '@modeler/parser';
 
 export interface SymbolEntry {
   qname: string;

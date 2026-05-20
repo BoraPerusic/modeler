@@ -145,8 +145,129 @@ The LSP maps parser codes to LSP severities as follows:
 | `ttr/invalid-type` | `Error` |
 | `ttr/entity-attribute-not-found` | `Error` |
 | `ttr/primary-key-column-not-found` | `Error` |
+| (v1.1 codes) | |
+| `ttr/unimported-reference` | `Information` |
+| `ttr/unused-import` | `Warning` |
+| `ttr/wildcard-with-no-matches` | `Warning` |
+| `ttr/duplicate-import` | `Warning` |
+| `ttr/circular-package-dependency` | `Warning` |
+| `ttr/package-declaration-mismatch` | `Error` |
+| `ttr/missing-package-declaration` | `Information` |
+| `ttr/ambiguous-reference` | `Error` |
+| `ttr/wrong-file-kind` | `Error` |
+| `ttr/graph-object-not-found` | `Warning` |
+| `ttr/graph-layout-stale-node` | `Warning` |
+| `ttr/graph-objects-empty` | `Warning` |
+| `ttr/graph-name-mismatch` | `Warning` |
+| `ttr/file-ordering` | `Warning` |
 
 All diagnostics carry `source: "modeler"` in the LSP `Diagnostic` payload. Phase 2 diagnostics may carry additional structured data in `data` fields for quick-fix actions.
+
+---
+
+## v1.1 Diagnostic codes
+
+These codes were added in v1.1 as part of the package-aware resolver work (sub-phase B.4).
+
+### `ttr/unimported-reference` (Information)
+
+A reference resolves via the fully-qualified step (step 6) to a def in a package that is not in the document's import list. The reference is valid, but the user should add an explicit import.
+
+Trigger: Fully-qualified ref like `pkg_b.er.entity.some_rel` where `pkg_b` is not imported.
+Fix: Add `import pkg_b.*` or `import pkg_b.er.entity.some_rel`.
+
+### `ttr/unused-import` (Warning)
+
+A named import statement has no matching references in the document.
+
+Trigger: `import pkg_b.entity_x` but `entity_x` is never referenced.
+Fix: Remove the import or use the imported symbol.
+
+### `ttr/wildcard-with-no-matches` (Warning)
+
+A wildcard import targets a package that has zero definitions.
+
+Trigger: `import pkg_b.*` but `pkg_b` has no definitions.
+Fix: Remove the wildcard import or add definitions to `pkg_b`.
+
+### `ttr/duplicate-import` (Warning)
+
+The same package is imported more than once, or a named import shadows a wildcard import of the same package.
+
+Trigger: `import pkg_b.*` followed by `import pkg_b.some_entity`.
+Fix: Remove the duplicate or shadowing import.
+
+### `ttr/circular-package-dependency` (Warning)
+
+A cycle is detected in the package dependency graph via `PackageGraphBuilder.findCycles()`.
+
+Trigger: `pkg_a` imports `pkg_b` and `pkg_b` imports `pkg_a` (directly or transitively).
+Fix: Restructure imports to break the cycle.
+
+### `ttr/package-declaration-mismatch` (Error)
+
+The declared `package` doesn't match the file's path under the project root.
+
+Trigger: File at `/project/pkg_a/sub/file.ttr` declares `package wrong.pkg`.
+Fix: Change the package declaration to `package pkg_a.sub`.
+
+### `ttr/missing-package-declaration` (Information)
+
+A file in a subdirectory has no `package` declaration.
+
+Trigger: File at `/project/pkg_a/file.ttr` has no `package` keyword.
+Fix: Add `package pkg_a` at the top of the file.
+
+### `ttr/ambiguous-reference` (Error)
+
+A bare reference matches defs in 2+ packages via wildcard imports.
+
+Trigger: `nameAttribute: shared_name` resolves to both `pkg_b.er.entity.shared_name` and `pkg_c.er.entity.shared_name`.
+Fix: Qualify with the full path: `pkg_b.er.entity.shared_name`.
+
+### `ttr/wrong-file-kind` (Error)
+
+A `.ttr` file contains a `graph { ... }` block, or a `.ttrg` file contains top-level `def` statements.
+
+Trigger: `graph test { schema: er }` in a `.ttr` file.
+Fix: Rename to `.ttrg` for graphs; use `.ttr` for definitions.
+
+### `ttr/graph-object-not-found` (Warning)
+
+A `.ttrg` `objects` entry doesn't resolve to any known definition.
+
+Trigger: `objects: [er.entity.nonexistent]` in a `.ttrg` file.
+Fix: Define the entity or correct the qname.
+
+### `ttr/graph-layout-stale-node` (Warning)
+
+A `.ttrg` `layout.nodes` key doesn't appear in `objects`.
+
+Trigger: `objects: [er.entity.artikl]` but `layout.nodes."er.entity.other"` is set.
+Fix: Add `er.entity.other` to `objects`, or remove the stale layout entry.
+
+### `ttr/graph-objects-empty` (Warning)
+
+A `.ttrg` has `objects: []` — the graph would render nothing.
+
+Trigger: `graph test { schema: er, objects: [] }`.
+Fix: Add at least one object to the graph.
+
+### `ttr/graph-name-mismatch` (Warning)
+
+A `.ttrg` filename (sans extension) doesn't match the inner `graph X { ... }` name.
+
+Trigger: File `artikl.ttrg` contains `graph wrong_name { ... }`.
+Fix: Rename the graph or the file.
+
+### `ttr/file-ordering` (Warning)
+
+> **Note for v1.1:** The grammar is order-strict. Out-of-order tokens produce `ttr/parse-error`, not `ttr/file-ordering`. This code exists as a placeholder for a future formatter that operates on a permissive AST builder and is not currently emittable on regular v1.1 input.
+
+File elements are out of canonical order: `package` → `imports` → `schema`/`graph` → `definitions`.
+
+Trigger: `schema er` appears before `import pkg_b.*`.
+Fix: Reorder the file contents.
 
 ---
 
