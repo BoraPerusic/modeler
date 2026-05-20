@@ -22,6 +22,8 @@ export enum DiagnosticCode {
   GraphObjectsEmpty = 'ttr/graph-objects-empty',
   GraphNameMismatch = 'ttr/graph-name-mismatch',
   FileOrdering = 'ttr/file-ordering',
+  FuzzyWithoutSearchable = 'ttr/fuzzy-without-searchable',
+  DuplicateSearchProperty = 'ttr/duplicate-search-property',
 }
 
 export enum DiagnosticSeverity {

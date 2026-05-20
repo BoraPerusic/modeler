@@ -11,7 +11,7 @@ Typ artiklu je určen hodnotou VLPODTYP_SLOZ:
     attributes: [
         def attribute id_artiklu { type: int, isKey: true, description: "Unikátní identifikátor artiklu", },
         def attribute kód_artiklu { type: text, optional: true, description: "Unikátní kód artiklu", },
-        def attribute název_artiklu { type: text, optional: true, description: "Obchodní název artiklu", },
+        def attribute název_artiklu { type: text, optional: true, description: "Obchodní název artiklu", search { searchable: true, fuzzy: true, keywords: { cs: ["název", "jméno"], en: ["name", "title"] } } },
         def attribute typ_artiklu { type: int, optional: true, description: "Typ artiklu (1 = Výrobek, 2 = Zboží, 3 = Materiál, 4 = Polotovar)", valueLabels: { "1": { cs: "Výrobek" }, "2": { cs: "Zboží" }, "3": { cs: "Materiál" }, "4": { cs: "Polotovar" } }, },
         def attribute id_produktu { type: int, optional: true, description: "Vazba na nadřazený produkt", },
         def attribute id_podproduktu { type: int, optional: true, description: "Vazba na nadřazený podprodukt", },

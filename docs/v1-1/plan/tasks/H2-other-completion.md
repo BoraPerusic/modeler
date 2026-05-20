@@ -10,8 +10,8 @@
 ## Tests-first
 
 - [ ] `packages/lsp/src/__tests__/completion-property.test.ts` — unit. Cases:
-  - Inside `def entity X { <CURSOR> }`: returns `description`, `tags`, `labelPlural`, `nameAttribute`, `codeAttribute`, `aliases`, `attributes`, `roles`, `displayLabel`, `searchBlock`. (Source: the grammar's `entityProperty` rule.)
-  - Inside `def column X { <CURSOR> }`: returns `description`, `tags`, `type`, `optional`, `isKey`, `searchable`, `indexed`.
+  - Inside `def entity X { <CURSOR> }`: returns `description`, `tags`, `labelPlural`, `nameAttribute`, `codeAttribute`, `aliases`, `attributes`, `roles`, `displayLabel`, `search`. The `search` block itself offers: `keywords`, `patterns`, `descriptions`, `examples`, `aliases`, `searchable`, `fuzzy`. (Source: the grammar's `entityProperty` rule.)
+  - Inside `def column X { <CURSOR> }`: returns `description`, `tags`, `type`, `optional`, `isKey`, `indexed`, `search`.
   - Inside `def table X { <CURSOR> }`: returns table properties.
   - The candidate list excludes properties already present in the current def body (no duplicates).
 - [ ] `packages/lsp/src/__tests__/completion-schema-def-kind.test.ts` — unit. Cases:

@@ -105,11 +105,11 @@ er2cncRoleDef    : LBRACE (er2cncRoleProperty    (COMMA? er2cncRoleProperty)*   
 
 modelProperty            : descriptionProperty | tagsProperty | versionProperty ;
 
-tableProperty            : descriptionProperty | tagsProperty | primaryKeyProperty | columnsProperty | indicesProperty | constraintsProperty ;
+tableProperty            : descriptionProperty | tagsProperty | primaryKeyProperty | columnsProperty | indicesProperty | constraintsProperty | searchBlockProperty ;
 
-viewProperty             : descriptionProperty | tagsProperty | columnsProperty | definitionSqlProperty ;
+viewProperty             : descriptionProperty | tagsProperty | columnsProperty | definitionSqlProperty | searchBlockProperty ;
 
-columnProperty           : descriptionProperty | tagsProperty | typeProperty | optionalProperty | isKeyProperty | searchableProperty | indexedProperty ;
+columnProperty           : descriptionProperty | tagsProperty | typeProperty | optionalProperty | isKeyProperty | indexedProperty | searchBlockProperty ;
 
 indexProperty            : descriptionProperty | indexTypeProperty | columnNamesListProperty ;
 
@@ -121,9 +121,9 @@ procedureProperty        : descriptionProperty | tagsProperty | parametersProper
 
 entityProperty           : descriptionProperty | tagsProperty | labelPluralProperty | nameAttributeProperty | codeAttributeProperty | aliasesProperty | attributesProperty | rolesProperty | displayLabelProperty | searchBlockProperty ;
 
-attributeProperty        : descriptionProperty | tagsProperty | typeProperty | isKeyProperty | optionalProperty | searchableProperty | valueLabelsProperty | displayLabelProperty | searchBlockProperty ;
+attributeProperty        : descriptionProperty | tagsProperty | typeProperty | isKeyProperty | optionalProperty | valueLabelsProperty | displayLabelProperty | searchBlockProperty ;
 
-relationProperty         : descriptionProperty | tagsProperty | fromProperty | toProperty | cardinalityProperty | joinProperty ;
+relationProperty         : descriptionProperty | tagsProperty | fromProperty | toProperty | cardinalityProperty | joinProperty | searchBlockProperty ;
 
 er2dbEntityProperty      : descriptionProperty | tagsProperty | entityProperty_ | targetProperty | whereFilterProperty ;
 
@@ -191,12 +191,13 @@ rolesProperty             : ROLES             propSep? listOfIds ;
 valueLabelsProperty       : VALUE_LABELS      propSep? valueLabelsBody ;
 roleProperty_             : ROLE              propSep? id ;
 
-// Search feature — `search { keywords {...} patterns [...] descriptions {...} examples [...] aliases [...] }`
+// Search feature — `search { keywords {...} patterns [...] descriptions {...} examples [...] aliases [...] searchable: true, fuzzy: true }`
 searchBlockProperty       : SEARCH            propSep? searchBlock ;
 keywordsProperty          : KEYWORDS          propSep? localizedStringList ;
 patternsProperty          : PATTERNS          propSep? listOfStrings ;
 descriptionsProperty      : DESCRIPTIONS      propSep? localizedStringList ;
 examplesProperty          : EXAMPLES          propSep? listOfStrings ;
+fuzzyProperty             : FUZZY             propSep? BOOLEAN_LITERAL ;
 
 // ----- Inline def lists -----
 
@@ -318,6 +319,8 @@ searchSubProperty
   | descriptionsProperty
   | examplesProperty
   | aliasesProperty
+  | searchableProperty
+  | fuzzyProperty
   ;
 
 object_
@@ -439,7 +442,7 @@ DISPLAY_LABEL     : 'displayLabel' ;
 VALUE_LABELS      : 'valueLabels' ;
 ROLES             : 'roles' ;
 
-// Search feature — `search { keywords {...} patterns [...] descriptions {...} examples [...] aliases [...] }`.
+// Search feature — `search { keywords {...} patterns [...] descriptions {...} examples [...] aliases [...] searchable: true, fuzzy: true }`.
 // `aliases` reuses the existing ALIASES token. `description` (single) and `descriptions` (list) are
 // distinct lexemes — ANTLR longest-match handles disambiguation.
 SEARCH            : 'search' ;
@@ -447,6 +450,7 @@ KEYWORDS          : 'keywords' ;
 PATTERNS          : 'patterns' ;
 DESCRIPTIONS      : 'descriptions' ;
 EXAMPLES          : 'examples' ;
+FUZZY             : 'fuzzy' ;
 
 FROM : 'from' ;
 TO   : 'to' ;

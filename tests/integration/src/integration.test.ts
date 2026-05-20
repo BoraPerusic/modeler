@@ -155,6 +155,8 @@ describe('parser integration', () => {
       ['graph_object_not_found.ttrg', ['ttr/graph-object-not-found']],
       ['graph_objects_empty.ttrg', ['ttr/graph-objects-empty']],
       ['graph_name_mismatch.ttrg', ['ttr/graph-name-mismatch']],
+      ['search-fuzzy-without-searchable.ttr', ['ttr/fuzzy-without-searchable']],
+      ['search-duplicate-subproperty.ttr', ['ttr/duplicate-search-property']],
     ];
 
     for (const [file, expected] of cases) {

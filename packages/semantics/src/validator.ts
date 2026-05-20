@@ -1,4 +1,4 @@
-import type { SourceLocation, Document } from '@modeler/parser';
+import type { SourceLocation, Document, SearchBlock, Definition } from '@modeler/parser';
 import { DiagnosticCode } from '@modeler/parser';
 import type { ResolvedManifest } from './manifest.js';
 import { Resolver } from './resolver.js';
@@ -14,6 +14,20 @@ export interface ValidationDiagnostic {
   severity: 'error' | 'warning' | 'info';
   message: string;
   source: SourceLocation;
+}
+
+function hasSearch(def: Definition): def is Definition & { search?: SearchBlock } {
+  return 'search' in def && def.kind !== 'column' && def.kind !== 'attribute';
+}
+
+function* searchBlocksOf(def: Definition): Iterable<SearchBlock> {
+  if (hasSearch(def) && def.search) yield def.search;
+  if (def.kind === 'table' || def.kind === 'view') {
+    for (const m of def.columns ?? []) if (m.search) yield m.search;
+  }
+  if (def.kind === 'entity') {
+    for (const m of def.attributes ?? []) if (m.search) yield m.search;
+  }
 }
 
 export class Validator {
@@ -114,6 +128,25 @@ export class Validator {
           message: 'Definition should have a description',
           source: def.source,
         });
+      }
+
+      for (const sb of searchBlocksOf(def)) {
+        if (sb.fuzzy === true && sb.searchable !== true) {
+          diagnostics.push({
+            code: DiagnosticCode.FuzzyWithoutSearchable,
+            severity: 'warning',
+            message: 'fuzzy search is enabled but the element is not marked searchable; set searchable: true',
+            source: sb.source,
+          });
+        }
+        for (const dup of sb.duplicateProperties ?? []) {
+          diagnostics.push({
+            code: DiagnosticCode.DuplicateSearchProperty,
+            severity: 'error',
+            message: `Duplicate '${dup}' in search block`,
+            source: sb.source,
+          });
+        }
       }
     }
 

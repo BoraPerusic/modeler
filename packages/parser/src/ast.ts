@@ -141,6 +141,9 @@ export interface SearchBlock {
   descriptions?: LocalizedStringList;
   examples?: string[];
   aliases?: string[];
+  searchable?: boolean;
+  fuzzy?: boolean;
+  duplicateProperties?: string[];
   source: SourceLocation;
 }
 
@@ -191,6 +194,7 @@ export interface TableDef {
   columns?: ColumnDef[];
   indices?: IndexDef[];
   constraints?: ConstraintDef[];
+  search?: SearchBlock;
 }
 
 export interface ViewDef {
@@ -201,6 +205,7 @@ export interface ViewDef {
   tags?: string[];
   columns?: ColumnDef[];
   definitionSql?: StringValue | TripleStringValue;
+  search?: SearchBlock;
 }
 
 export interface ColumnDef {
@@ -212,8 +217,8 @@ export interface ColumnDef {
   type?: DataType;
   optional?: boolean;
   isKey?: boolean;
-  searchable?: boolean;
   indexed?: boolean;
+  search?: SearchBlock;
 }
 
 export interface IndexDef {
@@ -279,7 +284,6 @@ export interface AttributeDef {
   type?: DataType;
   isKey?: boolean;
   optional?: boolean;
-  searchable?: boolean;
   valueLabels?: ValueLabels;
   displayLabel?: LocalizedString;
   search?: SearchBlock;
@@ -295,6 +299,7 @@ export interface RelationDef {
   to?: PropertyValue;
   cardinality?: ObjectValue;
   join?: ListValue;
+  search?: SearchBlock;
 }
 
 export interface Er2dbEntityDef {

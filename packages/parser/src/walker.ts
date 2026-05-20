@@ -600,6 +600,7 @@ function walkTableDef(
   let columns: ColumnDef[] | undefined;
   let indices: IndexDef[] | undefined;
   let constraints: ConstraintDef[] | undefined;
+  let search: SearchBlock | undefined;
 
   for (const p of ctx.tableProperty()) {
     if (p.descriptionProperty()) {
@@ -620,9 +621,12 @@ function walkTableDef(
     if (p.constraintsProperty()) {
       constraints = walkConstraintDefList(p.constraintsProperty()!.constraintDefList()!, file);
     }
+    if (p.searchBlockProperty()) {
+      search = walkSearchBlock(p.searchBlockProperty()!.searchBlock()!, file);
+    }
   }
 
-  return { kind: 'table', name, source, description, tags, primaryKey, columns, indices, constraints };
+  return { kind: 'table', name, source, description, tags, primaryKey, columns, indices, constraints, search };
 }
 
 function walkViewDef(
@@ -635,6 +639,7 @@ function walkViewDef(
   let tags: string[] | undefined;
   let columns: ColumnDef[] | undefined;
   let definitionSql: StringValue | TripleStringValue | undefined;
+  let search: SearchBlock | undefined;
 
   for (const p of ctx.viewProperty()) {
     if (p.descriptionProperty()) {
@@ -649,9 +654,12 @@ function walkViewDef(
     if (p.definitionSqlProperty()) {
       definitionSql = walkStringLiteralForm(p.definitionSqlProperty()!.stringLiteralForm()!, file);
     }
+    if (p.searchBlockProperty()) {
+      search = walkSearchBlock(p.searchBlockProperty()!.searchBlock()!, file);
+    }
   }
 
-  return { kind: 'view', name, source, description, tags, columns, definitionSql };
+  return { kind: 'view', name, source, description, tags, columns, definitionSql, search };
 }
 
 function walkColumnDef(
@@ -665,8 +673,8 @@ function walkColumnDef(
   let type: DataType | undefined;
   let optional: boolean | undefined;
   let isKey: boolean | undefined;
-  let searchable: boolean | undefined;
   let indexed: boolean | undefined;
+  let search: SearchBlock | undefined;
 
   for (const p of ctx.columnProperty()) {
     if (p.descriptionProperty()) {
@@ -684,15 +692,15 @@ function walkColumnDef(
     if (p.isKeyProperty()) {
       isKey = p.isKeyProperty()!.BOOLEAN_LITERAL()!.getText() === 'true';
     }
-    if (p.searchableProperty()) {
-      searchable = p.searchableProperty()!.BOOLEAN_LITERAL()!.getText() === 'true';
-    }
     if (p.indexedProperty()) {
       indexed = p.indexedProperty()!.BOOLEAN_LITERAL()!.getText() === 'true';
     }
+    if (p.searchBlockProperty()) {
+      search = walkSearchBlock(p.searchBlockProperty()!.searchBlock()!, file);
+    }
   }
 
-  return { kind: 'column', name, source, description, tags, type, optional, isKey, searchable, indexed };
+  return { kind: 'column', name, source, description, tags, type, optional, isKey, indexed, search };
 }
 
 function walkIndexDef(
@@ -882,7 +890,6 @@ function walkAttributeDef(
   let type: DataType | undefined;
   let isKey: boolean | undefined;
   let optional: boolean | undefined;
-  let searchable: boolean | undefined;
   let valueLabels: ValueLabels | undefined;
   let displayLabel: LocalizedString | undefined;
   let search: SearchBlock | undefined;
@@ -903,9 +910,6 @@ function walkAttributeDef(
     if (p.optionalProperty()) {
       optional = p.optionalProperty()!.BOOLEAN_LITERAL()!.getText() === 'true';
     }
-    if (p.searchableProperty()) {
-      searchable = p.searchableProperty()!.BOOLEAN_LITERAL()!.getText() === 'true';
-    }
     if (p.valueLabelsProperty()) {
       valueLabels = walkValueLabels(p.valueLabelsProperty()!.valueLabelsBody()!, file);
     }
@@ -917,7 +921,7 @@ function walkAttributeDef(
     }
   }
 
-  return { kind: 'attribute', name, source, description, tags, type, isKey, optional, searchable, valueLabels, displayLabel, search };
+  return { kind: 'attribute', name, source, description, tags, type, isKey, optional, valueLabels, displayLabel, search };
 }
 
 function walkRelationDef(
@@ -932,6 +936,7 @@ function walkRelationDef(
   let to: PropertyValue | undefined;
   let cardinality: ObjectValue | undefined;
   let join: ListValue | undefined;
+  let search: SearchBlock | undefined;
 
   for (const p of ctx.relationProperty()) {
     if (p.descriptionProperty()) {
@@ -952,9 +957,12 @@ function walkRelationDef(
     if (p.joinProperty()?.list()) {
       join = walkList(p.joinProperty()!.list()!, file);
     }
+    if (p.searchBlockProperty()) {
+      search = walkSearchBlock(p.searchBlockProperty()!.searchBlock()!, file);
+    }
   }
 
-  return { kind: 'relation', name, source, description, tags, from, to, cardinality, join };
+  return { kind: 'relation', name, source, description, tags, from, to, cardinality, join, search };
 }
 
 // ============================================================================
@@ -1182,8 +1190,8 @@ function walkColumnDefList(ctx: ColumnDefListContext, file: string): ColumnDef[]
     let type: DataType | undefined;
     let optional: boolean | undefined;
     let isKey: boolean | undefined;
-    let searchable: boolean | undefined;
     let indexed: boolean | undefined;
+    let search: SearchBlock | undefined;
 
     for (const p of inlineCtx.columnProperty()) {
       if (p.descriptionProperty()) {
@@ -1201,15 +1209,15 @@ function walkColumnDefList(ctx: ColumnDefListContext, file: string): ColumnDef[]
       if (p.isKeyProperty()) {
         isKey = p.isKeyProperty()!.BOOLEAN_LITERAL()!.getText() === 'true';
       }
-      if (p.searchableProperty()) {
-        searchable = p.searchableProperty()!.BOOLEAN_LITERAL()!.getText() === 'true';
-      }
       if (p.indexedProperty()) {
         indexed = p.indexedProperty()!.BOOLEAN_LITERAL()!.getText() === 'true';
       }
+      if (p.searchBlockProperty()) {
+        search = walkSearchBlock(p.searchBlockProperty()!.searchBlock()!, file);
+      }
     }
 
-    result.push({ kind: 'column', name, source: makeSourceLocation(inline, file), description, tags, type, optional, isKey, searchable, indexed });
+    result.push({ kind: 'column', name, source: makeSourceLocation(inline, file), description, tags, type, optional, isKey, indexed, search });
   }
   return result;
 }
@@ -1286,7 +1294,6 @@ function walkAttributeDefList(ctx: AttributeDefListContext, file: string): Attri
     let type: DataType | undefined;
     let isKey: boolean | undefined;
     let optional: boolean | undefined;
-    let searchable: boolean | undefined;
     let valueLabels: ValueLabels | undefined;
     let displayLabel: LocalizedString | undefined;
     let search: SearchBlock | undefined;
@@ -1307,9 +1314,6 @@ function walkAttributeDefList(ctx: AttributeDefListContext, file: string): Attri
       if (p.optionalProperty()) {
         optional = p.optionalProperty()!.BOOLEAN_LITERAL()!.getText() === 'true';
       }
-      if (p.searchableProperty()) {
-        searchable = p.searchableProperty()!.BOOLEAN_LITERAL()!.getText() === 'true';
-      }
       if (p.valueLabelsProperty()) {
         valueLabels = walkValueLabels(p.valueLabelsProperty()!.valueLabelsBody()!, file);
       }
@@ -1321,7 +1325,7 @@ function walkAttributeDefList(ctx: AttributeDefListContext, file: string): Attri
       }
     }
 
-    result.push({ kind: 'attribute', name, source: makeSourceLocation(inline, file), description, tags, type, isKey, optional, searchable, valueLabels, displayLabel, search });
+    result.push({ kind: 'attribute', name, source: makeSourceLocation(inline, file), description, tags, type, isKey, optional, valueLabels, displayLabel, search });
   }
   return result;
 }
@@ -1424,26 +1428,44 @@ function walkSearchBlock(ctx: SearchBlockContext, file: string): SearchBlock {
   let descriptions: LocalizedStringList | undefined;
   let examples: string[] | undefined;
   let aliases: string[] | undefined;
+  let searchable: boolean | undefined;
+  let fuzzy: boolean | undefined;
+  const seen = new Map<string, number>();
+  const bump = (k: string) => seen.set(k, (seen.get(k) ?? 0) + 1);
 
   for (const p of ctx.searchSubProperty()) {
     if (p.keywordsProperty()) {
+      bump('keywords');
       keywords = walkLocalizedStringList(p.keywordsProperty()!.localizedStringList()!, file);
     }
     if (p.patternsProperty()) {
+      bump('patterns');
       patterns = walkListOfStrings(p.patternsProperty()!.listOfStrings()!, file);
     }
     if (p.descriptionsProperty()) {
+      bump('descriptions');
       descriptions = walkLocalizedStringList(p.descriptionsProperty()!.localizedStringList()!, file);
     }
     if (p.examplesProperty()) {
+      bump('examples');
       examples = walkListOfStrings(p.examplesProperty()!.listOfStrings()!, file);
     }
     if (p.aliasesProperty()) {
+      bump('aliases');
       aliases = walkListOfStrings(p.aliasesProperty()!.listOfStrings()!, file);
+    }
+    if (p.searchableProperty()) {
+      bump('searchable');
+      searchable = p.searchableProperty()!.BOOLEAN_LITERAL()!.getText() === 'true';
+    }
+    if (p.fuzzyProperty()) {
+      bump('fuzzy');
+      fuzzy = p.fuzzyProperty()!.BOOLEAN_LITERAL()!.getText() === 'true';
     }
   }
 
-  return { kind: 'searchBlock', keywords, patterns, descriptions, examples, aliases, source: makeSourceLocation(ctx, file) };
+  const duplicateProperties = [...seen.entries()].filter(([, n]) => n > 1).map(([k]) => k);
+  return { kind: 'searchBlock', keywords, patterns, descriptions, examples, aliases, searchable, fuzzy, duplicateProperties, source: makeSourceLocation(ctx, file) };
 }
 
 function walkValueLabels(ctx: ValueLabelsBodyContext, file: string): ValueLabels {
