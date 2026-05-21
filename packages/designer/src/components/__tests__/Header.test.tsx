@@ -6,155 +6,165 @@ import { Header } from '../Header';
 afterEach(cleanup);
 
 describe('Header', () => {
-  it('1.2a: schema toggle starts disabled when projectUri === null', () => {
+  it('shows "TTR Modeler Designer" when no graph is open', () => {
     render(
       <Header
-        activeSchema="db"
+        graphName={null}
+        missingObjectsCount={0}
         displayMode="just-names"
         projectUri={null}
         transportKind={null}
         onFileLoad={vi.fn()}
-        onSchemaChange={vi.fn()}
         onDisplayModeChange={vi.fn()}
         onToggleNlPane={vi.fn()}
         onDirPick={vi.fn()}
-        onDownloadLayout={undefined}
+        onBack={vi.fn()}
+        onOpenFile={vi.fn()}
       />
     );
-    expect(screen.getByRole('button', { name: 'db' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'er' })).toBeDisabled();
+    expect(screen.getByText('TTR Modeler Designer')).toBeInTheDocument();
   });
 
-  it('1.2a: schema toggle becomes enabled after projectUri is set', () => {
+  it('shows graph name when a graph is open', () => {
     render(
       <Header
-        activeSchema="db"
+        graphName="artikl_overview"
+        missingObjectsCount={0}
         displayMode="just-names"
         projectUri="file:///x"
         transportKind={null}
         onFileLoad={vi.fn()}
-        onSchemaChange={vi.fn()}
         onDisplayModeChange={vi.fn()}
         onToggleNlPane={vi.fn()}
         onDirPick={vi.fn()}
-        onDownloadLayout={undefined}
+        onBack={vi.fn()}
+        onOpenFile={vi.fn()}
       />
     );
-    expect(screen.getByRole('button', { name: 'db' })).not.toBeDisabled();
-    expect(screen.getByRole('button', { name: 'er' })).not.toBeDisabled();
+    expect(screen.getByText('artikl_overview')).toBeInTheDocument();
   });
 
-  it('1.2b: clicking er button fires onSchemaChange with er', () => {
-    const onSchemaChange = vi.fn();
+  it('shows stale badge when missingObjectsCount > 0', () => {
     render(
       <Header
-        activeSchema="db"
+        graphName="artikl_overview"
+        missingObjectsCount={3}
         displayMode="just-names"
         projectUri="file:///x"
         transportKind={null}
         onFileLoad={vi.fn()}
-        onSchemaChange={onSchemaChange}
         onDisplayModeChange={vi.fn()}
         onToggleNlPane={vi.fn()}
         onDirPick={vi.fn()}
-        onDownloadLayout={undefined}
+        onBack={vi.fn()}
+        onOpenFile={vi.fn()}
       />
     );
-    fireEvent.click(screen.getByRole('button', { name: 'er' }));
-    expect(onSchemaChange).toHaveBeenCalledExactlyOnceWith('er');
+    expect(screen.getByText('3 stale')).toBeInTheDocument();
   });
 
-  it('1.2c: display-mode toggle reflects active schema displayMode', () => {
+  it('does not show stale badge when missingObjectsCount is 0', () => {
     render(
       <Header
-        activeSchema="db"
-        displayMode="with-constraints"
-        projectUri="file:///x"
-        transportKind={null}
-        onFileLoad={vi.fn()}
-        onSchemaChange={vi.fn()}
-        onDisplayModeChange={vi.fn()}
-        onToggleNlPane={vi.fn()}
-        onDirPick={vi.fn()}
-        onDownloadLayout={undefined}
-      />
-    );
-    expect(screen.getByRole('button', { name: 'with constraints' })).toHaveClass('text-sky-500');
-    expect(screen.getByRole('button', { name: 'just names' })).not.toHaveClass('text-sky-500');
-    expect(screen.getByRole('button', { name: 'with types' })).not.toHaveClass('text-sky-500');
-  });
-
-  it('1.2d: read-only badge is always visible regardless of projectUri', () => {
-    const { unmount } = render(
-      <Header
-        activeSchema="db"
-        displayMode="just-names"
-        projectUri={null}
-        transportKind={null}
-        onFileLoad={vi.fn()}
-        onSchemaChange={vi.fn()}
-        onDisplayModeChange={vi.fn()}
-        onToggleNlPane={vi.fn()}
-        onDirPick={vi.fn()}
-        onDownloadLayout={undefined}
-      />
-    );
-    expect(screen.getByText(/read-only/i)).toBeInTheDocument();
-    unmount();
-
-    render(
-      <Header
-        activeSchema="db"
+        graphName="artikl_overview"
+        missingObjectsCount={0}
         displayMode="just-names"
         projectUri="file:///x"
         transportKind={null}
         onFileLoad={vi.fn()}
-        onSchemaChange={vi.fn()}
         onDisplayModeChange={vi.fn()}
         onToggleNlPane={vi.fn()}
         onDirPick={vi.fn()}
-        onDownloadLayout={undefined}
+        onBack={vi.fn()}
+        onOpenFile={vi.fn()}
       />
     );
-    expect(screen.getByText(/read-only/i)).toBeInTheDocument();
+    expect(screen.queryByText('stale')).not.toBeInTheDocument();
   });
 
-  it('1.2e: NL-pane toggle button is present and fires onToggleNlPane', () => {
+  it('display-mode buttons call onDisplayModeChange with correct mode', () => {
+    const onDisplayModeChange = vi.fn();
+    render(
+      <Header
+        graphName="artikl_overview"
+        missingObjectsCount={0}
+        displayMode="just-names"
+        projectUri="file:///x"
+        transportKind={null}
+        onFileLoad={vi.fn()}
+        onDisplayModeChange={onDisplayModeChange}
+        onToggleNlPane={vi.fn()}
+        onDirPick={vi.fn()}
+        onBack={vi.fn()}
+        onOpenFile={vi.fn()}
+      />
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'with types' }));
+    expect(onDisplayModeChange).toHaveBeenCalledWith('with-types');
+    fireEvent.click(screen.getByRole('button', { name: 'with constraints' }));
+    expect(onDisplayModeChange).toHaveBeenCalledWith('with-constraints');
+  });
+
+  it('NL button calls onToggleNlPane', () => {
     const onToggleNlPane = vi.fn();
     render(
       <Header
-        activeSchema="db"
+        graphName="artikl_overview"
+        missingObjectsCount={0}
         displayMode="just-names"
         projectUri="file:///x"
         transportKind={null}
         onFileLoad={vi.fn()}
-        onSchemaChange={vi.fn()}
         onDisplayModeChange={vi.fn()}
         onToggleNlPane={onToggleNlPane}
         onDirPick={vi.fn()}
-        onDownloadLayout={undefined}
+        onBack={vi.fn()}
+        onOpenFile={vi.fn()}
       />
     );
     fireEvent.click(screen.getByRole('button', { name: /nl/i }));
     expect(onToggleNlPane).toHaveBeenCalledOnce();
   });
 
-  it('1.2f: file input has webkitdirectory attribute for folder upload', () => {
+  it('back button calls onBack when a graph is open', () => {
+    const onBack = vi.fn();
     render(
       <Header
-        activeSchema="db"
+        graphName="artikl_overview"
+        missingObjectsCount={0}
         displayMode="just-names"
         projectUri="file:///x"
         transportKind={null}
         onFileLoad={vi.fn()}
-        onSchemaChange={vi.fn()}
         onDisplayModeChange={vi.fn()}
         onToggleNlPane={vi.fn()}
         onDirPick={vi.fn()}
-        onDownloadLayout={undefined}
+        onBack={onBack}
+        onOpenFile={vi.fn()}
       />
     );
-    const fileInput = screen.getByRole('button', { name: 'Load Project Folder' }).previousSibling as HTMLInputElement;
-    expect(fileInput).toHaveAttribute('webkitdirectory');
+    fireEvent.click(screen.getByRole('button', { name: '←' }));
+    expect(onBack).toHaveBeenCalledOnce();
+  });
+
+  it('open file button calls onOpenFile', () => {
+    const onOpenFile = vi.fn();
+    render(
+      <Header
+        graphName="artikl_overview"
+        missingObjectsCount={0}
+        displayMode="just-names"
+        projectUri="file:///x"
+        transportKind={null}
+        onFileLoad={vi.fn()}
+        onDisplayModeChange={vi.fn()}
+        onToggleNlPane={vi.fn()}
+        onDirPick={vi.fn()}
+        onBack={vi.fn()}
+        onOpenFile={onOpenFile}
+      />
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Open .ttrg…' }));
+    expect(onOpenFile).toHaveBeenCalledOnce();
   });
 });

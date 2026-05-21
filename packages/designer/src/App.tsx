@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useReducer } from 'react';
 import { Header } from './components/Header';
 import { Canvas } from './components/Canvas';
+import { GraphPicker } from './components/GraphPicker';
 import { InspectorPanel } from './components/InspectorPanel';
 import { NlPane } from './components/NlPane';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -11,8 +12,8 @@ import { designerReducer } from './state/designer-reducer';
 import { initialDesignerState } from './state/designer-state';
 import { loadProjectViaFileSystemAccessAPI, type ProjectFiles } from './fs/file-system';
 import { loadDemoFiles } from './fs/demo-loader';
-import type { LayoutFile } from '@modeler/lsp';
-import { useProjectGraph } from './hooks/useProjectGraph';
+import { getGraphResponseToModelGraph } from './cy/adapter';
+import type { LayoutFile, DisplayMode } from '@modeler/lsp';
 import { useLayoutSync } from './hooks/useLayoutSync';
 
 function LandingCard({ onLoadProject, onOpenDemo }: { onLoadProject: () => void; onOpenDemo: () => void }) {
@@ -46,9 +47,9 @@ function App() {
   const [state, dispatch] = useReducer(designerReducer, initialDesignerState);
   const [nlPaneOpen, setNlPaneOpen] = useState(false);
   const [clientReady, setClientReady] = useState(false);
+  const [transportKind, setTransportKind] = useState<'node' | 'browser' | null>(null);
   const clientRef = useRef<LspClient | null>(null);
   const demoLoadingRef = useRef(false);
-  const [transportKind, setTransportKind] = useState<'node' | 'browser' | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -91,26 +92,22 @@ function App() {
     });
   }, [clientReady]);
 
-  useProjectGraph(state, dispatch, clientRef.current);
   useLayoutSync(state, dispatch, clientRef.current);
 
-  const prevViewportsRef = useRef(state.viewports);
+  const prevViewportRef = useRef(state.currentViewport);
   useEffect(() => {
-    const prev = prevViewportsRef.current;
-    prevViewportsRef.current = state.viewports;
-
-    if (!state.projectUri || !clientRef.current) return;
-    const active = state.activeSchema;
-    if (prev[active].displayMode === state.viewports[active].displayMode) return;
-
+    const prev = prevViewportRef.current;
+    prevViewportRef.current = state.currentViewport;
+    if (!state.currentGraphUri || !clientRef.current) return;
+    if (prev?.displayMode === state.currentViewport?.displayMode && prev?.zoom === state.currentViewport?.zoom) return;
     const layout: LayoutFile = {
       version: 1,
-      viewports: state.viewports,
+      viewports: { db: { zoom: 1, panX: 0, panY: 0, displayMode: 'just-names' }, er: { zoom: 1, panX: 0, panY: 0, displayMode: 'just-names' } },
       nodes: state.nodePositions,
       edges: {},
     };
-    clientRef.current.setLayout(state.projectUri, layout).catch(() => {});
-  }, [state.viewports, state.activeSchema, state.projectUri, state.nodePositions]);
+    clientRef.current.setLayout(state.currentGraphUri, layout).catch(() => {});
+  }, [state.currentViewport, state.currentGraphUri, state.nodePositions]);
 
   const handleFileLoad = async (files: ProjectFiles) => {
     const client = clientRef.current;
@@ -121,6 +118,8 @@ function App() {
       )
     );
     dispatch({ type: 'loadProject', projectUri: `file:///${files.rootName}` });
+    const result = await client.listGraphs(`file:///${files.rootName}`);
+    dispatch({ type: 'storeGraphList', graphs: result.graphs });
   };
 
   const handleDirPick = async () => {
@@ -132,6 +131,38 @@ function App() {
     const params = new URLSearchParams(window.location.search);
     params.set('demo', 'v1-metadata');
     window.location.search = params.toString();
+  };
+
+  const handleOpenTtrg = async () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.ttrg';
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      const content = await file.text();
+      const uri = `file:///${file.name}`;
+      const client = clientRef.current;
+      if (!client) return;
+      await client.openDocument(uri, content);
+      dispatch({ type: 'loadProject', projectUri: uri });
+      dispatch({ type: 'storeGraphList', graphs: [] });
+      await handleSelectGraph(uri);
+    };
+    input.click();
+  };
+
+  const handleSelectGraph = async (graphUri: string) => {
+    dispatch({ type: 'openGraph', graphUri });
+    const client = clientRef.current;
+    if (!client) return;
+    const graph = await client.getGraph(graphUri);
+    if (graph) {
+      dispatch({ type: 'storeGraph', graph });
+      if (graph.layout?.nodes && Object.keys(graph.layout.nodes).length > 0) {
+        dispatch({ type: 'loadLayout', layout: graph.layout });
+      }
+    }
   };
 
   const handleNodeSelect = (qname: string | null) => {
@@ -156,29 +187,36 @@ function App() {
   }, [state.selectedSymbol?.qname, state.symbolDetails]);
 
   const hasProject = state.projectUri !== null;
+  const hasGraph = state.currentGraphUri !== null;
+  const showPicker = hasProject && !hasGraph && !state.creatingGraph;
+  const graphName = state.currentGraphUri
+    ? (state.availableGraphs.find((g) => g.uri === state.currentGraphUri)?.name ?? state.currentGraphUri.split('/').pop() ?? null)
+    : null;
 
   return (
     <div className="flex flex-col h-screen bg-gray-50">
       <Header
-        activeSchema={state.activeSchema}
-        displayMode={state.viewports[state.activeSchema].displayMode}
+        graphName={graphName}
+        missingObjectsCount={state.currentGraph?.missingObjects?.length ?? 0}
+        displayMode={state.currentViewport?.displayMode ?? 'just-names'}
         projectUri={state.projectUri}
         transportKind={transportKind}
         onFileLoad={handleFileLoad}
-        onSchemaChange={(schema) => dispatch({ type: 'switchSchema', schema })}
-        onDisplayModeChange={(mode) => dispatch({ type: 'setDisplayMode', schema: state.activeSchema, mode })}
+        onDisplayModeChange={(mode: DisplayMode) => dispatch({ type: 'setDisplayMode', mode })}
         onToggleNlPane={() => setNlPaneOpen((v) => !v)}
         onDirPick={handleDirPick}
+        onBack={() => dispatch({ type: 'closeGraph' })}
+        onOpenFile={handleOpenTtrg}
         onDownloadLayout={async () => {
           const client = clientRef.current;
-          const uri = state.projectUri;
+          const uri = state.currentGraphUri;
           if (!client || !uri) return;
           const layout = await client.exportLayout(uri);
           const blob = new Blob([JSON.stringify(layout, null, 2)], { type: 'application/json' });
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
           a.href = url;
-          a.download = 'layout.ttrl';
+          a.download = 'layout.json';
           a.click();
           URL.revokeObjectURL(url);
         }}
@@ -190,22 +228,29 @@ function App() {
       )}
       {!hasProject ? (
         <LandingCard onLoadProject={handleDirPick} onOpenDemo={handleOpenDemo} />
-      ) : (
+      ) : showPicker ? (
+        <GraphPicker
+          graphs={state.availableGraphs}
+          onSelect={handleSelectGraph}
+          onCreateNew={() => dispatch({ type: 'startCreateWizard' })}
+        />
+      ) : hasGraph ? (
         <div className="flex flex-1 overflow-hidden">
           <div className="flex-1 relative">
             <ErrorBoundary
-              label={`${state.activeSchema} schema`}
-              resetKey={`${state.projectUri}|${state.activeSchema}`}
+              label={state.currentGraph?.schema ?? 'graph'}
+              resetKey={state.currentGraphUri ?? 'none'}
             >
               <Canvas
-                graph={state.graphsBySchema[state.activeSchema]}
-                displayMode={state.viewports[state.activeSchema].displayMode}
-                activeSchema={state.activeSchema}
-                viewports={state.viewports}
+                graph={state.currentGraph ? getGraphResponseToModelGraph(state.currentGraph) : null}
+                displayMode={state.currentViewport?.displayMode ?? 'just-names'}
+                activeSchema={'er'}
+                viewports={{ er: state.currentViewport ?? { zoom: 1, panX: 0, panY: 0, displayMode: 'just-names' }, db: { zoom: 1, panX: 0, panY: 0, displayMode: 'just-names' } }}
                 nodePositions={state.nodePositions}
                 lspClient={clientRef.current}
-                projectRoot={state.projectUri}
+                projectRoot={state.currentGraphUri}
                 onNodeSelect={handleNodeSelect}
+                currentViewport={state.currentViewport}
               />
             </ErrorBoundary>
           </div>
@@ -215,7 +260,7 @@ function App() {
             onSelect={handleNodeSelect}
           />
         </div>
-      )}
+      ) : null}
       <NlPane open={nlPaneOpen} onToggle={() => setNlPaneOpen((v) => !v)} />
     </div>
   );

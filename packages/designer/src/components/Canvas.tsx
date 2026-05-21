@@ -36,9 +36,12 @@ interface CanvasProps {
   lspClient: LspClient | null;
   projectRoot: string | null;
   onNodeSelect: (qname: string | null) => void;
+  currentViewport: ViewportState | null;
 }
 
-export function Canvas({ graph, displayMode, activeSchema, viewports, nodePositions, lspClient, projectRoot, onNodeSelect }: CanvasProps) {
+export function Canvas({ graph, displayMode, activeSchema, viewports, nodePositions, lspClient, projectRoot, onNodeSelect, currentViewport }: CanvasProps) {
+  void activeSchema;
+  void viewports;
   const containerRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
   const cyRef = useRef<CytoscapeInstance | null>(null);
@@ -48,8 +51,7 @@ export function Canvas({ graph, displayMode, activeSchema, viewports, nodePositi
   const lspClientRef = useRef<LspClient | null>(null);
   const projectRootRef = useRef<string | null>(null);
   const nodePositionsRef = useRef(nodePositions);
-  const activeSchemaRef = useRef(activeSchema);
-  const viewportsRef = useRef(viewports);
+  const currentViewportRef = useRef<ViewportState | null>(null);
   const cyInitRef = useRef(false);
   const rafRef = useRef<number | null>(null);
   const [cyReady, setCyReady] = useState(false);
@@ -60,8 +62,7 @@ export function Canvas({ graph, displayMode, activeSchema, viewports, nodePositi
   useEffect(() => { lspClientRef.current = lspClient; }, [lspClient]);
   useEffect(() => { projectRootRef.current = projectRoot; }, [projectRoot]);
   useEffect(() => { nodePositionsRef.current = nodePositions; }, [nodePositions]);
-  useEffect(() => { activeSchemaRef.current = activeSchema; }, [activeSchema]);
-  useEffect(() => { viewportsRef.current = viewports; }, [viewports]);
+  useEffect(() => { currentViewportRef.current = currentViewport; }, [currentViewport]);
 
   useEffect(() => {
     if (cyInitRef.current || !containerRef.current) return;
@@ -134,16 +135,11 @@ export function Canvas({ graph, displayMode, activeSchema, viewports, nodePositi
 
       function saveLayout() {
         const client = lspClientRef.current;
-        const root = projectRootRef.current;
+        const graphUri = projectRootRef.current;
         const cy = cyRef.current;
-        if (!client || !root || !cy) return;
-        const layout = buildLayout(
-          cy,
-          viewportsRef.current,
-          activeSchemaRef.current,
-          displayModeRef.current,
-        );
-        client.setLayout(root, layout).catch((_err: unknown) => {
+        if (!client || !graphUri || !cy) return;
+        const { nodes, viewport } = buildLayout(cy, currentViewportRef.current, displayModeRef.current);
+        client.setLayout(graphUri, { version: 1, viewports: { db: currentViewportRef.current ?? viewport, er: currentViewportRef.current ?? viewport }, nodes, edges: {} }).catch((_err: unknown) => {
         });
       }
 

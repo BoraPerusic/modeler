@@ -1,4 +1,4 @@
-import type { ModelGraph, ModelGraphNode, ModelGraphRow, DisplayMode } from '@modeler/lsp';
+import type { GetGraphResponse, ModelGraph, ModelGraphNode, ModelGraphRow, DisplayMode, RenderableSchemaCode } from '@modeler/lsp';
 
 export interface CyElement {
   group: 'nodes' | 'edges';
@@ -86,4 +86,12 @@ export function modelGraphToCyElements(
   }
 
   return elements;
+}
+
+export function getGraphResponseToModelGraph(response: GetGraphResponse): ModelGraph {
+  const schema: RenderableSchemaCode = (response.schema === 'db' || response.schema === 'er')
+    ? response.schema
+    : 'er';
+  const nodes = response.nodes.map((n) => ({ ...n, schemaCode: schema }));
+  return { schemaCode: schema, nodes, edges: response.edges };
 }
