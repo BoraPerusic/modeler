@@ -22,7 +22,7 @@ Eight strategic decisions taken during the design conversation; everything below
 |---|---|---|---|
 | D1 | Parser/semantic-layer strategy | Strategy A — TypeScript LSP server consumed by all three hosts; parser regenerated from grammar with `antlr4ng` | Static-site-friendly Designer, no JVM dep for VS Code, IntelliJ via LSP4IJ; ai-platform's Kotlin parser stays for runtime, both regenerate from the same `.g4` |
 | D2 | Grammar ownership | Modeler owns `grammar/TTR.g4`; ai-platform vendors a copy synced via CI | The language tooling project owns the language definition; clearer change-control |
-| D3 | Designer ↔ TTR sync | Pattern γ — Designer issues structured graph edits via custom LSP requests; LSP synthesises text edits; node positions live in `.ttrl` sidecars | Text remains canonical for the language; layout lives where it belongs; comments and formatting are preserved |
+| D3 | Designer ↔ TTR sync | Pattern γ — Designer issues structured graph edits via custom LSP requests; LSP synthesises text edits; node positions live in `.ttrl` sidecars **(superseded in v1.1: layout now lives in each `.ttrg` file's `layout` block — see `docs/v1-1/` D4)** | Text remains canonical for the language; layout lives where it belongs; comments and formatting are preserved |
 | D4 | Project model | Convention-by-default; optional `modeler.toml` manifest | Lowest onboarding friction; manifest available when projects grow |
 | D5 | LSP / VS Code v1 scope | Foundation tier (highlighting, syntax-error diagnostics, brackets) + Core tier (cross-reference resolution, undefined-ref diagnostics, go-to-definition, find-references, hover) | Enough to deliver the "I trust this language now" moment; Productivity (completion) and Polish (rename/format/code actions) ship in v1.1+ |
 | D6 | Build sequence | Sequence II — vertical thin slice end-to-end first (LSP minimum + VS Code minimum + Designer minimum), then iterate | Continuous demo-able progress; early integration learnings; avoids the over-engineering risk of "LSP-first" |
@@ -165,7 +165,7 @@ Custom `modeler/*` methods for the Designer:
 
 - `modeler/getModelGraph` — returns the resolved model as a JSON graph (nodes, edges, qnames, layout hints) so the Designer can render without re-parsing
 - `modeler/applyGraphEdit` — accepts a `GraphEdit` operation; returns a `WorkspaceEdit` for the host to apply; the LSP also re-parses and re-validates after the host confirms application
-- `modeler/getLayout` / `modeler/setLayout` — read/write the project's `.ttrl` sidecar (managed by the LSP rather than the host so layout state is consistent across hosts)
+- `modeler/getLayout` / `modeler/setLayout` — read/write the project's `.ttrl` sidecar (managed by the LSP rather than the host so layout state is consistent across hosts). **Superseded in v1.1:** these are now `graphUri`-scoped and read/write the `layout` block inside the target `.ttrg` file; `setLayout` returns a `WorkspaceEdit` the host applies (see contracts §8, decision D4).
 - `modeler/getProjectInfo` — returns the resolved project root, manifest contents (or convention defaults), declared schemas, stock-vocab references
 
 The LSP runs in two transports:
@@ -179,7 +179,7 @@ Both transports speak the same protocol; the only difference is the message tran
 
 Deliberately thin. Contributes:
 
-- Language registration for `.ttr` and `.ttrl` (file extensions, MIME types)
+- Language registration for `.ttr` and `.ttrl` (file extensions, MIME types) *(v1.1: `.ttrl` is removed; `.ttrg` graph files are registered instead — see `docs/v1-1/`)*
 - Language configuration (bracket pairs, comment toggle, auto-close, indentation rules)
 - TextMate grammar for syntax highlighting (auto-generated from `TTR.g4` via a script in `@modeler/grammar`; covers tokens only, semantic tokens via LSP for richer cases)
 - LSP client wiring — spawns the LSP server as a child process, manages lifecycle
@@ -218,7 +218,7 @@ The Designer is published as a static site (GitHub Pages or similar). It's also 
 
 Gradle-based, written in Kotlin, using the IntelliJ Platform Gradle Plugin and LSP4IJ. The plugin:
 
-- Registers `.ttr` and `.ttrl` as file types
+- Registers `.ttr` and `.ttrl` as file types *(v1.1: `.ttrl` is removed; register `.ttrg` instead — see `docs/v1-1/`)*
 - Registers an LSP4IJ language server descriptor pointing at a bundled Node + LSP bundle
 - Bundles a per-platform Node binary (or detects an existing one) so users don't need Node installed separately
 
@@ -257,6 +257,8 @@ require-descriptions = false       # require `description` on every def
 All keys are optional; missing values use the same defaults convention-by-default would apply.
 
 ## 6. Layout sidecar (`.ttrl`) format
+
+> **Superseded in v1.1.** The standalone `.ttrl` sidecar described below was removed in v1.1 (decision D4). Layout now lives inside each `.ttrg` file's `layout` block (unquoted dotted-id node keys; see `docs/v1-1/design/v1-1-contracts.md` §7.1), read/written via the `graphUri`-scoped `modeler/getLayout` / `modeler/setLayout` methods (contracts §8). The v1 sidecar format below is retained only as historical record.
 
 One `.ttrl` per project, stored at `<project-root>/.modeler/layout.ttrl`. JSON; managed by the LSP, never hand-edited (though structured so it's not actively user-hostile if someone opens it). Schema:
 
@@ -419,7 +421,7 @@ In the GitHub Pages deployment, the Designer is a static React app served from `
 │                                    └─────────────────────┘
 ```
 
-Communication: the LSP Web Worker is instantiated by the Designer via `new Worker(new URL('@modeler/lsp/browser?worker', import.meta.url))`. The LSP protocol (initialize, textDocument/didOpen, etc.) runs over `postMessage`. Layout persistence is handled via `modeler/setLayout` / `modeler/getLayout` custom requests that store to / read from `.modeler/layout.ttrl` via an in-memory Map (the browser has no filesystem).
+Communication: the LSP Web Worker is instantiated by the Designer via `new Worker(new URL('@modeler/lsp/browser?worker', import.meta.url))`. The LSP protocol (initialize, textDocument/didOpen, etc.) runs over `postMessage`. Layout persistence is handled via `modeler/setLayout` / `modeler/getLayout` custom requests. **(v1.1: layout is read from / written to the `layout` block inside the target `.ttrg` file — `setLayout` returns a `WorkspaceEdit` the host applies — not a `.modeler/layout.ttrl` sidecar. See decision D4 and contracts §8.)**
 
 Key behaviour:
 - **Schema toggle**: cached in `graphsBySchema`; only re-fetches from LSP when cache is null

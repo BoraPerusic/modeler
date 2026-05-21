@@ -134,4 +134,21 @@ describe('Extension smoke test', function () {
     const hasArtikl = symbols.some((s) => s.name.includes('artikl'));
     assert.ok(hasArtikl, `expected an artikl symbol; got: ${symbols.map((s) => s.name).slice(0, 10).join(', ')}`);
   });
+
+  it('TC6 — .ttrg language detection and LSP diagnostics', async () => {
+    const ttrgUri = vscode.Uri.file(path.resolve(__dirname, '../../test-fixtures/smoke_clean.ttrg'));
+    const ttrgDoc = await vscode.workspace.openTextDocument(ttrgUri);
+    await vscode.window.showTextDocument(ttrgDoc);
+
+    assert.strictEqual(ttrgDoc.languageId, 'ttrg', '.ttrg file should have languageId ttrg');
+
+    await waitFor(() => {
+      const diagnostics = vscode.languages.getDiagnostics(ttrgUri);
+      return diagnostics.length > 0;
+    }, 10000);
+
+    const diagnostics = vscode.languages.getDiagnostics(ttrgUri);
+    const errors = diagnostics.filter((d) => d.severity === vscode.DiagnosticSeverity.Error);
+    assert.ok(errors.length > 0, 'smoke_clean.ttrg has objects:[] so it should produce at least one error');
+  });
 });

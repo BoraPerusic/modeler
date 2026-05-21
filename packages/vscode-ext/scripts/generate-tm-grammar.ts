@@ -178,7 +178,7 @@ function buildGrammar(tokens: TokenDef[]): object {
   const byScope = new Map<string, string[]>();
   const rules: ScopeRule[] = [];
 
-  const scopeMap: Record<string, ScopeRule[]> = {
+  const scopeMap: Record<string, string[]> = {
     'keyword.control.def.ttr': [],
     'keyword.control.package.ttr': [],
     'keyword.control.import.ttr': [],
@@ -200,8 +200,8 @@ function buildGrammar(tokens: TokenDef[]): object {
   for (const token of tokens) {
     const scope = tokenToScope(token.name, token.literal);
     if (!scope) continue;
-    if (!byScope.has(scope)) byScope.set(scope, []);
-    byScope.get(scope)!.push(escapeRegex(token.literal));
+    if (!scopeMap[scope]) scopeMap[scope] = [];
+    scopeMap[scope].push(escapeRegex(token.literal));
   }
 
   const keywordScopes = [
@@ -214,11 +214,11 @@ function buildGrammar(tokens: TokenDef[]): object {
     'keyword.other.property.ttr',
   ];
 
-  const keywordsRepo: ScopeRule[] = [];
+  const keywordsRepo: { scope: string; match: string; }[] = [];
   for (const scope of keywordScopes) {
     const rules = scopeMap[scope];
     if (rules.length > 0) {
-      const combined = rules.map(r => r.match!.replace(/^\\b\(|\)\\b$/g, '')).join('|');
+      const combined = rules.join('|');
       keywordsRepo.push({ scope, match: '\\b(' + combined + ')\\b' });
     }
   }
@@ -270,9 +270,10 @@ function buildGrammar(tokens: TokenDef[]): object {
         patterns: keywordScopes.map(scope => ({ include: '#' + scope.replace(/\./g, '_') })),
       },
       ...Object.fromEntries(
-        Object.entries(scopeMap).filter(([_, rules]) => rules.length > 0).map(([scope, scopeRules]) => {
+        keywordScopes.map(scope => {
           const key = scope.replace(/\./g, '_');
-          return [key, { patterns: scopeRules }];
+          const rules = scopeMap[scope] ?? [];
+          return [key, { patterns: [{ name: scope, match: '\\b(' + rules.join('|') + ')\\b' }] }];
         })
       ),
       operators: {

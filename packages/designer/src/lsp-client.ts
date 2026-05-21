@@ -10,16 +10,23 @@ import {
   InitializeParams,
 } from 'vscode-languageserver-protocol';
 
-import type { ModelGraph, LayoutFile, SymbolDetail, RenderableSchemaCode } from '@modeler/lsp';
+import type { ModelGraph, LayoutFile, SymbolDetail, RenderableSchemaCode, GraphMetadata, GetGraphResponse, PackageGraphResponse } from '@modeler/lsp';
+import type { WorkspaceEdit } from 'vscode-languageserver-types';
 import LspWorker from '@modeler/lsp/browser?worker';
 
 export interface LspClient {
   transportKind: 'node' | 'browser';
   openDocument(uri: string, content: string): Promise<void>;
+  listGraphs(projectRoot: string): Promise<{ graphs: GraphMetadata[] }>;
+  getGraph(uri: string): Promise<GetGraphResponse | null>;
+  getPackageGraph(): Promise<PackageGraphResponse>;
   getModelGraph(uri: string, schema: RenderableSchemaCode): Promise<ModelGraph>;
-  getLayout(projectRoot: string): Promise<LayoutFile>;
-  setLayout(projectRoot: string, layout: LayoutFile): Promise<{ ok: boolean }>;
-  exportLayout(projectRoot: string): Promise<LayoutFile>;
+  getLayout(uri: string, projectRoot?: string): Promise<LayoutFile>;
+  setLayout(uri: string, layout: LayoutFile, projectRoot?: string): Promise<WorkspaceEdit>;
+  exportLayout(uri?: string, projectRoot?: string): Promise<LayoutFile>;
+  addObjectToGraph(uri: string, qname: string, autoImport: boolean): Promise<WorkspaceEdit>;
+  removeObjectFromGraph(uri: string, qname: string, pruneUnusedImport: boolean): Promise<WorkspaceEdit>;
+  createGraph(params: { uri: string; name: string; schema: 'db' | 'er' | 'map' | 'query' | 'cnc'; packages: string[]; objects: string[]; description?: string; tags?: string[] }): Promise<WorkspaceEdit>;
   applyGraphEdit(_params: unknown): Promise<{ ok: false; reason: string }>;
   getSymbolDetail(qname: string): Promise<SymbolDetail | null>;
   onDiagnostics(handler: (uri: string, messages: string[]) => void): void;
@@ -49,20 +56,38 @@ export async function createLspClient(): Promise<LspClient> {
         textDocument: { uri, languageId: 'ttr', version: 1, text: content },
       });
     },
+    async listGraphs(projectRoot) {
+      return connection.sendRequest('modeler/listGraphs', { projectRoot }) as Promise<{ graphs: GraphMetadata[] }>;
+    },
+    async getGraph(uri) {
+      return connection.sendRequest('modeler/getGraph', { uri }) as Promise<GetGraphResponse | null>;
+    },
+    async getPackageGraph() {
+      return connection.sendRequest('modeler/getPackageGraph', {}) as Promise<PackageGraphResponse>;
+    },
     async getModelGraph(uri, schema) {
       return connection.sendRequest('modeler/getModelGraph', {
         textDocument: { uri },
         schema,
       }) as Promise<ModelGraph>;
     },
-    async getLayout(projectRoot) {
-      return connection.sendRequest('modeler/getLayout', { projectRoot }) as Promise<LayoutFile>;
+    async getLayout(uri, projectRoot) {
+      return connection.sendRequest('modeler/getLayout', { graphUri: uri, projectRoot }) as Promise<LayoutFile>;
     },
-    async setLayout(projectRoot, layout) {
-      return connection.sendRequest('modeler/setLayout', { projectRoot, layout }) as Promise<{ ok: boolean }>;
+    async setLayout(uri, layout, projectRoot) {
+      return connection.sendRequest('modeler/setLayout', { graphUri: uri, layout, projectRoot }) as Promise<WorkspaceEdit>;
     },
-    async exportLayout(projectRoot) {
-      return connection.sendRequest('modeler/exportLayout', { projectRoot }) as Promise<LayoutFile>;
+    async exportLayout(uri, projectRoot) {
+      return connection.sendRequest('modeler/exportLayout', { graphUri: uri, projectRoot }) as Promise<LayoutFile>;
+    },
+    async addObjectToGraph(uri, qname, autoImport) {
+      return connection.sendRequest('modeler/addObjectToGraph', { uri, qname, autoImport }) as Promise<WorkspaceEdit>;
+    },
+    async removeObjectFromGraph(uri, qname, pruneUnusedImport) {
+      return connection.sendRequest('modeler/removeObjectFromGraph', { uri, qname, pruneUnusedImport }) as Promise<WorkspaceEdit>;
+    },
+    async createGraph(params) {
+      return connection.sendRequest('modeler/createGraph', params) as Promise<WorkspaceEdit>;
     },
     async applyGraphEdit(_params) {
       return connection.sendRequest('modeler/applyGraphEdit', _params) as Promise<{ ok: false; reason: string }>;

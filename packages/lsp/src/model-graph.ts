@@ -533,6 +533,82 @@ export function computeGraphEdges(graph: GraphBlock, asts: Document[]): ModelGra
   return edges;
 }
 
+export function buildNodeForDef(
+  def: Definition,
+  schemaCode: string,
+  namespace: string,
+  preferredLang: string,
+): ModelGraphNode | null {
+  if (def.kind === 'table') {
+    const rows: ModelGraphRow[] = (def.columns ?? []).map(col => ({
+      name: col.name,
+      qname: buildQname(schemaCode, namespace, [def.name, col.name]),
+      kind: 'column' as const,
+      type: renderDataType(col.type),
+      isKey: !!(col.isKey || (def.primaryKey ?? []).includes(col.name)),
+      optional: !!col.optional,
+      isNameAttribute: false,
+      isCodeAttribute: false,
+    }));
+    return {
+      qname: buildQname(schemaCode, namespace, [def.name]),
+      kind: 'table',
+      name: def.name,
+      schemaCode: schemaCode as RenderableSchemaCode,
+      label: def.name,
+      sourceUri: def.source.file,
+      sourceLocation: { line: def.source.line, column: def.source.column },
+      rows,
+    };
+  } else if (def.kind === 'view') {
+    const rows: ModelGraphRow[] = (def.columns ?? []).map(col => ({
+      name: col.name,
+      qname: buildQname(schemaCode, namespace, [def.name, col.name]),
+      kind: 'column' as const,
+      type: renderDataType(col.type),
+      isKey: false,
+      optional: !!col.optional,
+      isNameAttribute: false,
+      isCodeAttribute: false,
+    }));
+    return {
+      qname: buildQname(schemaCode, namespace, [def.name]),
+      kind: 'view',
+      name: def.name,
+      schemaCode: schemaCode as RenderableSchemaCode,
+      label: def.name,
+      sourceUri: def.source.file,
+      sourceLocation: { line: def.source.line, column: def.source.column },
+      rows,
+    };
+  } else if (def.kind === 'entity') {
+    const entity = def as EntityDef;
+    const nameAttrPath = entity.nameAttribute?.path;
+    const codeAttrPath = entity.codeAttribute?.path;
+    const rows: ModelGraphRow[] = (entity.attributes ?? []).map(attr => ({
+      name: attr.name,
+      qname: buildQname(schemaCode, namespace, [def.name, attr.name]),
+      kind: 'attribute' as const,
+      type: renderDataType(attr.type),
+      isKey: !!attr.isKey,
+      optional: !!attr.optional,
+      isNameAttribute: attr.name === nameAttrPath,
+      isCodeAttribute: attr.name === codeAttrPath,
+    }));
+    return {
+      qname: buildQname(schemaCode, namespace, [def.name]),
+      kind: 'entity',
+      name: def.name,
+      schemaCode: schemaCode as RenderableSchemaCode,
+      label: getDisplayLabel(def, preferredLang),
+      sourceUri: def.source.file,
+      sourceLocation: { line: def.source.line, column: def.source.column },
+      rows,
+    };
+  }
+  return null;
+}
+
 export function buildProjectModelGraph(asts: Document[], schema: RenderableSchemaCode, preferredLang = 'en'): ModelGraph {
   const nodes: ModelGraphNode[] = [];
   const edges: ModelGraphEdge[] = [];
@@ -554,73 +630,9 @@ export function buildProjectModelGraph(asts: Document[], schema: RenderableSchem
 
   const knownQnames = new Set(knownNodes.keys());
 
-  for (const [, { def, qname, schemaCode, namespace }] of knownNodes) {
-    if (def.kind === 'table') {
-      const rows: ModelGraphRow[] = (def.columns ?? []).map(col => ({
-        name: col.name,
-        qname: buildQname(schemaCode, namespace, [def.name, col.name]),
-        kind: 'column' as const,
-        type: renderDataType(col.type),
-        isKey: !!(col.isKey || (def.primaryKey ?? []).includes(col.name)),
-        optional: !!col.optional,
-        isNameAttribute: false,
-        isCodeAttribute: false,
-      }));
-      nodes.push({
-        qname,
-        kind: 'table',
-        name: def.name,
-        schemaCode: schema as RenderableSchemaCode,
-        label: def.name,
-        sourceUri: def.source.file,
-        sourceLocation: { line: def.source.line, column: def.source.column },
-        rows,
-      });
-    } else if (def.kind === 'view') {
-      const rows: ModelGraphRow[] = (def.columns ?? []).map(col => ({
-        name: col.name,
-        qname: buildQname(schemaCode, namespace, [def.name, col.name]),
-        kind: 'column' as const,
-        type: renderDataType(col.type),
-        isKey: false,
-        optional: !!col.optional,
-        isNameAttribute: false,
-        isCodeAttribute: false,
-      }));
-      nodes.push({
-        qname,
-        kind: 'view',
-        name: def.name,
-        schemaCode: schema as RenderableSchemaCode,
-        label: def.name,
-        sourceUri: def.source.file,
-        sourceLocation: { line: def.source.line, column: def.source.column },
-        rows,
-      });
-    } else if (def.kind === 'entity') {
-      const nameAttrPath = (def as EntityDef).nameAttribute?.path;
-      const codeAttrPath = (def as EntityDef).codeAttribute?.path;
-      const rows: ModelGraphRow[] = (def.attributes ?? []).map(attr => ({
-        name: attr.name,
-        qname: buildQname(schemaCode, namespace, [def.name, attr.name]),
-        kind: 'attribute' as const,
-        type: renderDataType(attr.type),
-        isKey: !!attr.isKey,
-        optional: !!attr.optional,
-        isNameAttribute: attr.name === nameAttrPath,
-        isCodeAttribute: attr.name === codeAttrPath,
-      }));
-      nodes.push({
-        qname,
-        kind: 'entity',
-        name: def.name,
-        schemaCode: schema as RenderableSchemaCode,
-        label: getDisplayLabel(def, preferredLang),
-        sourceUri: def.source.file,
-        sourceLocation: { line: def.source.line, column: def.source.column },
-        rows,
-      });
-    }
+  for (const [, { def, schemaCode, namespace }] of knownNodes) {
+    const node = buildNodeForDef(def, schemaCode, namespace, preferredLang);
+    if (node) nodes.push(node);
   }
 
   for (const ast of asts) {

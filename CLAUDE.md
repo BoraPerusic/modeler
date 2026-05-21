@@ -62,7 +62,7 @@ grammar  →  parser  →  semantics  →  lsp  →  vscode-ext
 
 ### Key invariants
 
-- **Text is canonical.** The Designer never owns model state independently — it issues structured edits via custom LSP requests, the LSP synthesizes `WorkspaceEdit`s, the host applies them, and the LSP re-parses. Node positions are sidecar data, stored in `<project-root>/.modeler/layout.ttrl` and managed by the LSP (hosts never touch this file directly).
+- **Text is canonical.** The Designer never owns model state independently — it issues structured edits via custom LSP requests, the LSP synthesizes `WorkspaceEdit`s, the host applies them, and the LSP re-parses. Node positions live inside each `.ttrg` file's `layout` block (v1.1; see contracts §7.1): the LSP reads them via `modeler/getLayout` and writes them by synthesizing a `WorkspaceEdit` via `modeler/setLayout` that the host applies — there is no separate sidecar file. (The original v1 `<project-root>/.modeler/layout.ttrl` sidecar was removed in v1.1 — see `docs/v1-1/` decision D4.)
 - **One LSP across hosts.** Don't add per-host language logic. New language features go in `parser` / `semantics` / `lsp`; hosts stay thin.
 - **Parser stays mechanical.** It mirrors ai-platform's Kotlin parser. Don't add resolution logic to `@modeler/parser` — that belongs in `@modeler/semantics`.
 - **Project root resolution.** Walk up looking for `modeler.toml`; otherwise treat the LSP `workspaceFolder` as root with convention defaults. Manifest schema is in §5 of the architecture doc.

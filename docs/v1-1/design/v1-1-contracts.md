@@ -1,6 +1,6 @@
 # v1.1 — Contracts
 
-**Status:** v5, 2026-05-21. Companion to [`docs/v1-1/design/v1.1-packages-and-graphs.md`](v1.1-packages-and-graphs.md), [`docs/v1-1/design/grammar-v1-1-changes.md`](grammar-v1-1-changes.md), and the per-sub-phase mini-task-lists under [`docs/v1-1/plan/tasks/`](../plan/tasks/).
+**Status:** v6, 2026-05-21. Companion to [`docs/v1-1/design/v1.1-packages-and-graphs.md`](v1.1-packages-and-graphs.md), [`docs/v1-1/design/grammar-v1-1-changes.md`](grammar-v1-1-changes.md), and the per-sub-phase mini-task-lists under [`docs/v1-1/plan/tasks/`](../plan/tasks/).
 
 **Audience:** the implementer (junior dev or coding agent) executing v1.1. The contracts here are non-negotiable — every type, every method signature, every grammar token, every diagnostic code is the single source of truth. If a mini-task-list shows a snippet that conflicts with this document, **this document wins**. Open a PR against this file to amend.
 
@@ -528,10 +528,10 @@ interface GetPackageGraphResponse {
 
 | Method                        | Change                                                                                       |
 | ----------------------------- | -------------------------------------------------------------------------------------------- |
-| `modeler/getModelGraph`       | Adds required `graphUri` param; project-wide rendering removed                               |
-| `modeler/getLayout`           | Adds required `graphUri` param; project-wide `.ttrl` removed                                 |
-| `modeler/setLayout`           | Adds required `graphUri` param                                                               |
-| `modeler/exportLayout`        | Adds required `graphUri` param; downloads a `.ttrg` file (was `.ttrl`)                       |
+| `modeler/getModelGraph`       | **Unchanged** — kept as the whole-schema render (decision D3); the new `.ttrg`-scoped render is `modeler/getGraph` (§8.2). Both share the node/edge builders. |
+| `modeler/getLayout`           | Takes `graphUri`; reads the `layout` block inside that `.ttrg`. The project-wide `.modeler/layout.ttrl` sidecar is removed (D4). An in-memory `projectRoot`/`layoutStore` fallback is retained only as a host/test seam. |
+| `modeler/setLayout`           | Takes `graphUri`; returns a `WorkspaceEdit` that rewrites the `.ttrg`'s `layout` block (unquoted dotted-id node keys, §7.1) — the host applies it. No on-disk sidecar. |
+| `modeler/exportLayout`        | Takes `graphUri`; delegates to `getLayout` (reads the `.ttrg` `layout` block). The `.ttrl` sidecar is removed (D4).                                              |
 | `modeler/getProjectInfo`      | Response gains `packages: PackageInfo[]`                                                     |
 
 ```ts
@@ -714,6 +714,7 @@ export interface CreateGraphWizardProps {
 
 ## 12. Changelog
 
+- **v6, 2026-05-21** — §8.7 clarified to match the shipped C2 surface: `getModelGraph` is **unchanged** (kept as the whole-schema render alongside the new `.ttrg`-scoped `getGraph`, per decision D3); `getLayout`/`setLayout`/`exportLayout` are `graphUri`-scoped and read/write the `.ttrg`'s `layout` block (`setLayout` returns a `WorkspaceEdit`); the project-wide `.modeler/layout.ttrl` sidecar is removed (D4), with an in-memory `layoutStore` retained only as a host/test seam.
 - **v5, 2026-05-21** — §7.1 `layout.nodes` keys changed from quoted strings to unquoted dotted-ids (grammar `key : id` accepts only unquoted ids; `setLayout` will emit unquoted — see C2.7).
 - **v4, 2026-05-19** — clarified §3.1: removed the "(v1 shape, unchanged)" parenthetical, which was inaccurate. v1.1's qname construction always uses the kind as namespace fallback when no `namespace` clause is present; this changes the shape for unpackaged, no-namespace files (e.g. `db.users` → `db.table.users`). Stock-cnc doubling rule unchanged.
 - **v3, 2026-05-19** — relaxed GraphLayout.viewport.displayMode in §2 from the three-member union to string; the union narrowing now happens in semantics, not parsing. Designer's DisplayMode in §11.2 unchanged.

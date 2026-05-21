@@ -54,20 +54,17 @@
         }
       },
       {
-        "id": "ttrl",
+        "id": "ttrg",
         "extensions": [
-          ".ttrl"
+          ".ttrg"
         ],
         "aliases": [
-          "TTR Layout"
+          "TTR Graph"
         ],
-        "mimetypes": [
-          "application/ttrl+json"
-        ],
-        "configuration": "./language-configuration-ttrl.json",
+        "configuration": "./language-configuration.json",
         "icon": {
-          "light": "./icons/ttrl.svg",
-          "dark": "./icons/ttrl.svg"
+          "light": "./icons/ttrg.svg",
+          "dark": "./icons/ttrg.svg"
         }
       }
     ],
@@ -78,15 +75,9 @@
         "path": "./syntaxes/ttr.tmLanguage.json"
       },
       {
-        "language": "ttrl",
-        "scopeName": "source.ttrl",
-        "path": "./syntaxes/ttrl.tmLanguage.json"
-      }
-    ],
-    "jsonValidation": [
-      {
-        "fileMatch": "*.ttrl",
-        "url": "./schemas/ttrl.schema.json"
+        "language": "ttrg",
+        "scopeName": "source.ttrg",
+        "path": "./syntaxes/ttrg.tmLanguage.json"
       }
     ],
     "configuration": {
@@ -114,6 +105,7 @@
     ]
   },
   "activationEvents": [
-    "onLanguage:ttr"
+    "onLanguage:ttr",
+    "onLanguage:ttrg"
   ]
 }

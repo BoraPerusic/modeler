@@ -20,7 +20,10 @@ export function activate(context: vscode.ExtensionContext) {
   };
 
   const client = new LanguageClient('ttr', 'TTR Language Server', serverOptions, {
-    documentSelector: [{ scheme: 'file', language: 'ttr' }],
+    documentSelector: [
+      { scheme: 'file', language: 'ttr' },
+      { scheme: 'file', language: 'ttrg' },
+    ],
     outputChannelName: 'TTR Language Server',
   });
 

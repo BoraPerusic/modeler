@@ -38,7 +38,9 @@ import {
   type ValidationDiagnostic,
   type PackageGraph,
 } from '@modeler/semantics';
-import { buildProjectModelGraph, emptyLayout, validateLayout, buildSymbolDetail, type LayoutFile, type RenderableSchemaCode } from './model-graph.js';
+import { buildProjectModelGraph, emptyLayout, buildSymbolDetail, type LayoutFile, type RenderableSchemaCode } from './model-graph.js';
+import { listGraphs, getGraph, getPackageGraphFromCache } from './graph-methods.js';
+import { buildAddObjectEdit, buildRemoveObjectEdit, buildCreateGraphEdit, buildSetLayoutEdit, type WorkspaceEdit } from '@modeler/edit';
 
 export interface ServerOptions {
   /**
@@ -59,8 +61,7 @@ export interface ServerOptions {
 
   /**
    * Optional in-memory layout store for browser mode. Maps project root URI
-   * to the current LayoutFile. Node mode reads/writes `.modeler/layout.ttrl`
-   * directly, so this is only used in browser workers.
+   * to the current LayoutFile.
    */
   layoutStore?: Map<string, LayoutFile>;
 }
@@ -360,59 +361,124 @@ export function createServerConnection(
     return buildProjectModelGraph(asts, params.schema, manifest.preferredLanguage);
   });
 
-  connection.onRequest('modeler/getLayout', async (_params: { projectRoot: string }): Promise<LayoutFile> => {
-    if (opts.layoutStore) {
-      return opts.layoutStore.get(_params.projectRoot) ?? emptyLayout();
+  connection.onRequest('modeler/listGraphs', (_params: { projectRoot: string }) => {
+    const docMap = new Map<string, string>();
+    for (const doc of documents.all()) docMap.set(doc.uri, doc.getText());
+    const allDocs: import('@modeler/parser').Document[] = [];
+    for (const doc of documents.all()) {
+      const result = parseString(doc.getText(), doc.uri);
+      if (result.ast) allDocs.push(result.ast);
     }
-    const { readFileSync } = await import('node:fs');
-    const { join } = await import('node:path');
-    const layoutPath = join(_params.projectRoot, '.modeler', 'layout.ttrl');
-    try {
-      const raw = readFileSync(layoutPath, 'utf-8');
-      const parsed = JSON.parse(raw);
-      const validated = validateLayout(parsed);
-      if (validated) return validated;
-    } catch {
-      // fall through to emptyLayout
+    const qnameToDef = new Map<string, { def: import('@modeler/parser').Definition; schemaCode: string; namespace: string }>();
+    for (const ast of allDocs) {
+      const schemaCode = ast.schemaDirective?.schemaCode ?? 'er';
+      const namespace = ast.schemaDirective?.namespace ?? '';
+      for (const def of ast.definitions) {
+        const qname = [schemaCode, namespace, def.name].filter(s => s !== '').join('.');
+        qnameToDef.set(qname, { def, schemaCode, namespace });
+      }
+    }
+    return { graphs: listGraphs(docMap, qnameToDef) };
+  });
+
+  connection.onRequest('modeler/getGraph', (_params: { uri: string }) => {
+    const docMap = new Map<string, string>();
+    for (const doc of documents.all()) docMap.set(doc.uri, doc.getText());
+    return getGraph(_params.uri, docMap, manifest.preferredLanguage);
+  });
+
+  connection.onRequest('modeler/getPackageGraph', () => {
+    const pkgGraph = getPackageGraph();
+    return getPackageGraphFromCache(pkgGraph);
+  });
+
+  connection.onRequest('modeler/getLayout', async (_params: { graphUri?: string; projectRoot?: string }): Promise<LayoutFile> => {
+    if (_params.graphUri) {
+      const content = documents.get(_params.graphUri)?.getText();
+      if (content) {
+        const result = parseString(content, _params.graphUri);
+        if (result.ast?.graph?.layout) {
+          const layout = result.ast.graph.layout;
+          const schema = result.ast.graph.schema ?? 'er';
+          const viewport = layout.viewport ? {
+            zoom: layout.viewport.zoom,
+            panX: layout.viewport.panX,
+            panY: layout.viewport.panY,
+            displayMode: layout.viewport.displayMode as 'with-types' | 'just-names' | 'with-constraints',
+          } : undefined;
+          return {
+            version: 1,
+            viewports: { [schema]: viewport ?? { zoom: 1.0, panX: 0, panY: 0, displayMode: 'just-names' } },
+            nodes: layout.nodes ?? {},
+            edges: (layout.edges ?? {}) as Record<string, { bendPoints: [number, number][] }>,
+          } as LayoutFile;
+        }
+      }
+      return emptyLayout();
+    }
+    if (opts.layoutStore && _params.projectRoot) {
+      return opts.layoutStore.get(_params.projectRoot) ?? emptyLayout();
     }
     return emptyLayout();
   });
 
-  connection.onRequest('modeler/setLayout', async (_params: { projectRoot: string; layout: LayoutFile }): Promise<{ ok: boolean }> => {
-    if (opts.layoutStore) {
+  connection.onRequest('modeler/setLayout', async (_params: { graphUri?: string; projectRoot?: string; layout: LayoutFile }): Promise<WorkspaceEdit> => {
+    if (_params.graphUri) {
+      const content = documents.get(_params.graphUri)?.getText();
+      if (!content) return { documentChanges: [] };
+      const vp = _params.layout.viewports;
+      const schemaKey = vp && 'er' in vp ? 'er' : vp && 'db' in vp ? 'db' : null;
+      const viewport = schemaKey ? vp[schemaKey] : undefined;
+      return buildSetLayoutEdit(content, _params.graphUri, { nodes: _params.layout.nodes, edges: _params.layout.edges, viewport });
+    }
+    if (opts.layoutStore && _params.projectRoot) {
       opts.layoutStore.set(_params.projectRoot, _params.layout);
-      return { ok: true };
+      return { documentChanges: [] };
     }
-    const { mkdirSync, writeFileSync, renameSync } = await import('node:fs');
-    const { join } = await import('node:path');
-    const dir = join(_params.projectRoot, '.modeler');
-    mkdirSync(dir, { recursive: true });
-    const tmpPath = join(dir, `layout.ttrl.${process.pid}.tmp`);
-    writeFileSync(tmpPath, JSON.stringify(_params.layout, null, 2), 'utf-8');
-    renameSync(tmpPath, join(dir, 'layout.ttrl'));
-    return { ok: true };
+    return { documentChanges: [] };
   });
 
-  connection.onRequest('modeler/exportLayout', async (_params: { projectRoot: string }): Promise<LayoutFile> => {
-    if (opts.layoutStore) {
-      return opts.layoutStore.get(_params.projectRoot) ?? emptyLayout();
+  connection.onRequest('modeler/exportLayout', async (_params: { graphUri?: string; projectRoot?: string }): Promise<LayoutFile> => {
+    if (_params.graphUri) {
+      return connection.sendRequest('modeler/getLayout', { graphUri: _params.graphUri }) as Promise<LayoutFile>;
     }
-    const { readFileSync } = await import('node:fs');
-    const { join } = await import('node:path');
-    const layoutPath = join(_params.projectRoot, '.modeler', 'layout.ttrl');
-    try {
-      const raw = readFileSync(layoutPath, 'utf-8');
-      const parsed = JSON.parse(raw);
-      const validated = validateLayout(parsed);
-      if (validated) return validated;
-    } catch {
-      // fall through to emptyLayout
-    }
-    return emptyLayout();
+    return connection.sendRequest('modeler/getLayout', { projectRoot: _params.projectRoot }) as Promise<LayoutFile>;
   });
 
   connection.onRequest('modeler/applyGraphEdit', (_params: unknown): { ok: false; reason: string } => {
     return { ok: false, reason: 'edit-mode-not-available-in-v1' };
+  });
+
+  connection.onRequest('modeler/addObjectToGraph', (_params: { uri: string; qname: string; autoImport: boolean }) => {
+    const content = documents.get(_params.uri)?.getText();
+    if (!content) return { documentChanges: [] };
+    let packageToImport: string | null = null;
+    if (_params.autoImport) {
+      const symbol = projectSymbols.get(_params.qname);
+      if (symbol?.packageName) {
+        packageToImport = symbol.packageName;
+      } else {
+        const firstSegment = _params.qname.split('.')[0];
+        const schemaCodes = ['db', 'er', 'map', 'query', 'cnc'];
+        if (!schemaCodes.includes(firstSegment)) {
+          packageToImport = firstSegment;
+        }
+      }
+    }
+    return buildAddObjectEdit(content, _params.uri, _params.qname, packageToImport);
+  });
+
+  connection.onRequest('modeler/removeObjectFromGraph', (_params: { uri: string; qname: string; pruneUnusedImport: boolean }) => {
+    const content = documents.get(_params.uri)?.getText();
+    if (!content) return { documentChanges: [] };
+    return buildRemoveObjectEdit(content, _params.uri, _params.qname, _params.pruneUnusedImport);
+  });
+
+  connection.onRequest('modeler/createGraph', (_params: { uri: string; name: string; schema: 'db' | 'er' | 'map' | 'query' | 'cnc'; packages: string[]; objects: string[]; description?: string; tags?: string[] }) => {
+    if (!_params.uri.endsWith('.ttrg')) {
+      return { documentChanges: [] };
+    }
+    return buildCreateGraphEdit(_params);
   });
 
   connection.onRequest('modeler/getSymbolDetail', (params: { qname: string }) => {

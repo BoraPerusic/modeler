@@ -65,22 +65,28 @@ six-step resolver, as references do). Contract §7.1 uses fully-qualified object
 → exact lookup is probably right, but **verify** and document. Affects C1.5 too
 (edge endpoints must resolve the same way).
 
-### D3 — `getModelGraph` vs `getGraph` overlap
+### D3 — `getModelGraph` vs `getGraph` overlap — **DECIDED**
 
-Contract §8 keeps **both** `modeler/getModelGraph` (v1, now takes `graphUri`) and
-the new `modeler/getGraph`. They look redundant — both return nodes/edges for
-rendering. Decide: does `getGraph` supersede `getModelGraph`, or do they serve
-different callers (whole-schema render vs `.ttrg`-scoped render)? Settle before
-C2.2/C2.7 so we don't ship two near-identical methods. (Designer (E) is the only
-consumer — check what E1–E4 actually call.)
+**Decision (2026-05-21): keep both, they serve different purposes.**
 
-### D4 — `.ttrl` removal blast radius (C2.7)
+- `getModelGraph` — whole-schema render (all defs of a given `schema`). Used by v1
+  paths that need a complete schema view.
+- `getGraph` — `.ttrg`-scoped render (only `objects` entries declared in one graph
+  file). Used when rendering a specific graph.
+- They **must share** the per-kind node/row builder — no duplication. Task A1 extracts
+  `buildNodeForDef` that both call.
 
-C2.7 deletes the project-wide `<root>/.modeler/layout.ttrl` path; layout moves
-into the `.ttrg` `layout` block. Audit current `.ttrl` read/write in
-`model-graph.ts` + `server.ts` and the architecture doc's "Text is canonical /
-layout sidecar" invariant — that invariant text needs updating, since layout is
-no longer a sidecar. Confirm nothing in v1 D/E still depends on `.ttrl`.
+### D4 — `.ttrl` removal blast radius (C2.7) — **DECIDED**
+
+**Decision (2026-05-21): remove the `.ttrl` sidecar.**
+
+- Layout canonical location is now the `.ttrg`'s `layout` block.
+- The project-wide `<root>/.modeler/layout.ttrl` path is deleted.
+- The `getLayout`/`setLayout`/`exportLayout` `.ttrl` branches are removed.
+- The architecture invariant "text is canonical / layout is sidecar" is updated to
+  reflect that layout is now inside the `.ttrg` (CC2).
+- If D/E need layout persistence between sessions they will read/write it via
+  `getLayout`/`setLayout` using the `.ttrg` file — not a separate sidecar.
 
 ---
 
