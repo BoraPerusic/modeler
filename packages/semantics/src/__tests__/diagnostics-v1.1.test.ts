@@ -280,6 +280,21 @@ describe('B4 diagnostics — ttr/wrong-file-kind', () => {
   });
 });
 
+describe('C1 — ttr/graph-schema-required', () => {
+  it('emits Error when graph block omits schema', () => {
+    const result = parseString(`graph test { objects: [] }`, 'test.ttrg');
+    const ast = result.ast!;
+    const symbols = new ProjectSymbolTable();
+    const manifest = makeManifest();
+    const resolver = new Resolver(symbols);
+    const v = new Validator(symbols, resolver, manifest);
+    const diags = v.validateTtrgGraph('test.ttrg', ast);
+    const schemaMissing = diags.find((d) => d.code === DiagnosticCode.RequiredPropertyMissing && d.message.includes("graph requires a 'schema'"));
+    expect(schemaMissing).toBeDefined();
+    expect(schemaMissing!.severity).toBe('error');
+  });
+});
+
 describe('B4 diagnostics — ttr/graph-object-not-found', () => {
   it('emits Warning when a graph objects entry does not resolve', () => {
     const result = parseString(

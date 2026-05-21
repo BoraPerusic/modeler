@@ -2,27 +2,20 @@
 
 > Findings in [`review-032.md`](review-032.md). T1–T4 are essentially done and correct. This is a short follow-up list: 1 real fix, 2 optional polish, 1 separate-ticket flag, 1 coordination item.
 
-## 1. Regenerate the stale TextMate generator artifact — DO
+## 1. Regenerate the stale TextMate generator artifact — ✅ DONE
 
-The `.ts` was edited (added `case 'FUZZY'`) but the compiled `.js` it derives — which the canonical regen script actually runs — was never regenerated, so it's missing the `FUZZY` case.
+> Done. `generate-tm-grammar.js:111` now has `case 'FUZZY': return 'keyword.other.property.ttr';`, and `ttr.tmLanguage.json` is unchanged (as expected — see task 4). Committed.
 
-- [ ] **1.1.** Run the canonical regen:
-  ```bash
-  pnpm --filter @modeler/vscode-ext run regen-tmgrammar
-  ```
-- [ ] **1.2.** Confirm `git diff` shows the `FUZZY` case now present in `packages/vscode-ext/scripts/generate-tm-grammar.js`, and that `packages/vscode-ext/syntaxes/ttr.tmLanguage.json` is unchanged (expected — see task 4; the generator doesn't emit property-keyword patterns).
-- [ ] **1.3.** Commit the regenerated `.js` alongside the grammar change (per the feature's commit-style rule: regeneration in the same commit as the edit it derives from).
+- [x] **1.1.** Run the canonical regen.
+- [x] **1.2.** `FUZZY` case present in the `.js`; `ttr.tmLanguage.json` unchanged.
+- [x] **1.3.** Committed.
 
-## 2. Guard the two new broken fixtures — OPTIONAL (recommended)
+## 2. Guard the two new broken fixtures — ✅ DONE
 
-`search-fuzzy-without-searchable.ttr` and `search-duplicate-subproperty.ttr` live under `samples/broken/v1.1/` but no test asserts they emit their intended code.
+> Done. The two rows are in the B7 table (`integration.test.ts:158–159`), and the suite is green — integration now **48 passed | 2 skipped** (was 46+2). Both fixtures emit exactly their advertised code with no stray extras.
 
-- [ ] **2.1.** Add two rows to the B7 table in `tests/integration/src/integration.test.ts` → `describe('v1.1 broken fixture diagnostics')`:
-  ```ts
-  ['search-fuzzy-without-searchable.ttr', ['ttr/fuzzy-without-searchable']],
-  ['search-duplicate-subproperty.ttr', ['ttr/duplicate-search-property']],
-  ```
-- [ ] **2.2.** Run `pnpm --filter @modeler/integration-tests test` and confirm the exact-set assertions pass (these fixtures declare no package and are root files, so they should emit only their search diagnostic — verify there's no stray code).
+- [x] **2.1.** Two rows added to the B7 table.
+- [x] **2.2.** `pnpm --filter @modeler/integration-tests test` green; exact-set assertions pass.
 
 ## 3. Tighten `searchBlocksOf` typing — OPTIONAL
 

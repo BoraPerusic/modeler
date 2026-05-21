@@ -1,0 +1,17 @@
+// hand-authored fixture for 1.1.C; eventual home is the migrated samples in 1.1.G
+schema er namespace entity
+def entity artikl {
+  attributes: [
+    def attribute id { type: int, isKey: true },
+    def attribute nazev { type: text },
+    def attribute cena { type: numeric }
+  ]
+}
+def entity dobropis {
+  attributes: [
+    def attribute id { type: int, isKey: true },
+    def attribute popis { type: text },
+    def attribute artikl_id { type: int }
+  ]
+}
+def relation artikl_dobropis { from: er.entity.artikl, to: er.entity.dobropis, cardinality: { from: "1", to: "0..*" } }

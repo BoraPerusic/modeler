@@ -1,0 +1,18 @@
+// hand-authored fixture for 1.1.C; eventual home is the migrated samples in 1.1.G
+graph artikl_overview {
+  schema: er,
+  description: "Overview of artikl entity and its relations",
+  tags: ["core-domain"],
+  objects: [
+    er.entity.artikl,
+    er.entity.dobropis,
+    er.entity.artikl_dobropis
+  ],
+  layout: {
+    viewport: { zoom: 1.0, panX: 0, panY: 0, displayMode: "with-types" },
+    nodes: {
+      er.entity.artikl: { x: 320, y: 180 },
+      er.entity.dobropis: { x: 580, y: 180 }
+    }
+  }
+}

@@ -220,15 +220,21 @@ function walkDocument(ctx: DocumentContext, file: string, syntaxErrors: ParseErr
     walkDefinition(defCtx, file)
   );
 
-  // TODO(C1): also emit WrongFileKind when a .ttrg file has no graph block.
-  // The walker doesn't know the file extension; that check belongs in the LSP/file-loader
-  // layer once .ttrg parsing lands.
   if (graphCtx && definitions.length > 0) {
     localErrors.push({
       code: DiagnosticCode.WrongFileKind,
       message: "A file containing 'graph { ... }' must not also contain top-level 'def' definitions.",
       severity: 'error',
       source: makeSourceLocation(graphCtx, file),
+    });
+  }
+
+  if (file.endsWith('.ttrg') && !graphCtx) {
+    localErrors.push({
+      code: DiagnosticCode.WrongFileKind,
+      message: "A '.ttrg' file must contain a 'graph { ... }' block.",
+      severity: 'error',
+      source: makeSourceLocation(ctx, file),
     });
   }
 

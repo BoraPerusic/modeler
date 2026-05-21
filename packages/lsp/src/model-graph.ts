@@ -1,5 +1,5 @@
 import Ajv2020Module from 'ajv/dist/2020.js';
-import type { Definition, Document, EntityDef, ObjectValue, SimpleDataType, StructuredDataType, RoleDef } from '@modeler/parser';
+import type { Definition, Document, EntityDef, ObjectValue, SimpleDataType, StructuredDataType, RoleDef, GraphBlock } from '@modeler/parser';
 import type { ProjectSymbolTable, Resolver, ReferenceIndex, ResolvedManifest } from '@modeler/semantics';
 
 export type RenderableSchemaCode = 'db' | 'er';
@@ -85,6 +85,52 @@ export function extractCardinality(obj: ObjectValue | undefined): { from: Cardin
     return parseCardinality(entry.value.value);
   };
   return { from: lookup('from'), to: lookup('to') };
+}
+
+function buildEdgeForDef(
+  def: Definition,
+  schemaCode: string,
+  namespace: string,
+  knownQnames: Set<string>,
+): ModelGraphEdge | null {
+  const defQname = buildQname(schemaCode, namespace, [def.name]);
+  if (def.kind === 'fk') {
+    const fromQname = extractFkRef(def.from, schemaCode, namespace, knownQnames);
+    const toQname = extractFkRef(def.to, schemaCode, namespace, knownQnames);
+    if (fromQname && toQname) {
+      return {
+        id: defQname,
+        qname: defQname,
+        kind: 'fk',
+        fromNode: fromQname,
+        toNode: toQname,
+        fromCardinality: null,
+        toCardinality: null,
+        sourceUri: def.source.file,
+        sourceLocation: { line: def.source.line, column: def.source.column },
+      };
+    }
+  } else if (def.kind === 'relation') {
+    const fromRef = def.from?.kind === 'id' ? { path: def.from.path, parts: def.from.parts } : null;
+    const toRef = def.to?.kind === 'id' ? { path: def.to.path, parts: def.to.parts } : null;
+    const fromQname = fromRef ? resolveRef(fromRef, schemaCode, namespace, knownQnames) : null;
+    const toQname = toRef ? resolveRef(toRef, schemaCode, namespace, knownQnames) : null;
+    if (fromQname && toQname) {
+      const card = extractCardinality(def.cardinality);
+      return {
+        id: defQname,
+        qname: defQname,
+        kind: 'relation',
+        fromNode: fromQname,
+        toNode: toQname,
+        fromCardinality: card.from,
+        toCardinality: card.to,
+        sourceUri: def.source.file,
+        sourceLocation: { line: def.source.line, column: def.source.column },
+      };
+    }
+  }
+  return null;
 }
 
 // Layout sidecar types
@@ -462,6 +508,31 @@ export function buildModelGraph(ast: Document, schema: RenderableSchemaCode, pre
   return buildProjectModelGraph([ast], schema, preferredLang);
 }
 
+// computeGraphEdges: objects in .ttrg are expected to be fully-qualified qnames
+// (contract §7.1, decision D2). Endpoints resolve via resolveRef against the
+// objects set -- NOT the six-step Resolver. Bare/wildcard-imported objects in
+// a .ttrg will not resolve here.
+export function computeGraphEdges(graph: GraphBlock, asts: Document[]): ModelGraphEdge[] {
+  const objectSet = new Set(graph.objects ?? []);
+  if (objectSet.size === 0) return [];
+
+  const edges: ModelGraphEdge[] = [];
+
+  for (const ast of asts) {
+    const schemaCode = ast.schemaDirective?.schemaCode ?? 'er';
+    const namespace = ast.schemaDirective?.namespace ?? '';
+
+    for (const def of ast.definitions) {
+      const defQname = buildQname(schemaCode, namespace, [def.name]);
+      if (!objectSet.has(defQname)) continue;
+      const edge = buildEdgeForDef(def, schemaCode, namespace, objectSet);
+      if (edge) edges.push(edge);
+    }
+  }
+
+  return edges;
+}
+
 export function buildProjectModelGraph(asts: Document[], schema: RenderableSchemaCode, preferredLang = 'en'): ModelGraph {
   const nodes: ModelGraphNode[] = [];
   const edges: ModelGraphEdge[] = [];
@@ -559,41 +630,9 @@ export function buildProjectModelGraph(asts: Document[], schema: RenderableSchem
     const namespace = ast.schemaDirective?.namespace ?? '';
 
     for (const def of ast.definitions) {
-      if (def.kind === 'fk') {
-        const fromQname = extractFkRef(def.from, schemaCode, namespace, knownQnames);
-        const toQname = extractFkRef(def.to, schemaCode, namespace, knownQnames);
-        if (fromQname && toQname) {
-          edges.push({
-            id: buildQname(schemaCode, namespace, [def.name]),
-            qname: buildQname(schemaCode, namespace, [def.name]),
-            kind: 'fk',
-            fromNode: fromQname,
-            toNode: toQname,
-            fromCardinality: null,
-            toCardinality: null,
-            sourceUri: def.source.file,
-            sourceLocation: { line: def.source.line, column: def.source.column },
-          });
-        }
-      } else if (def.kind === 'relation') {
-        const fromRef = def.from?.kind === 'id' ? { path: def.from.path, parts: def.from.parts } : null;
-        const toRef = def.to?.kind === 'id' ? { path: def.to.path, parts: def.to.parts } : null;
-        const fromQname = fromRef ? resolveRef(fromRef, schemaCode, namespace, knownQnames) : null;
-        const toQname = toRef ? resolveRef(toRef, schemaCode, namespace, knownQnames) : null;
-        if (fromQname && toQname) {
-          const card = extractCardinality(def.cardinality);
-          edges.push({
-            id: buildQname(schemaCode, namespace, [def.name]),
-            qname: buildQname(schemaCode, namespace, [def.name]),
-            kind: 'relation',
-            fromNode: fromQname,
-            toNode: toQname,
-            fromCardinality: card.from,
-            toCardinality: card.to,
-            sourceUri: def.source.file,
-            sourceLocation: { line: def.source.line, column: def.source.column },
-          });
-        }
+      if (def.kind === 'fk' || def.kind === 'relation') {
+        const edge = buildEdgeForDef(def, schemaCode, namespace, knownQnames);
+        if (edge) edges.push(edge);
       }
     }
   }

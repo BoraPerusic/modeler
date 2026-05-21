@@ -152,9 +152,11 @@ describe('parser integration', () => {
       ['ambiguous-reference.ttr', ['ttr/ambiguous-reference']],
       ['pkg_a/package-declaration-mismatch.ttr', ['ttr/package-declaration-mismatch']],
       ['pkg_a/sub/missing-package-declaration.ttr', ['ttr/missing-package-declaration']],
+      ['graph-missing.ttrg', ['ttr/wrong-file-kind']],
       ['graph_object_not_found.ttrg', ['ttr/graph-object-not-found']],
       ['graph_objects_empty.ttrg', ['ttr/graph-objects-empty']],
       ['graph_name_mismatch.ttrg', ['ttr/graph-name-mismatch']],
+      ['graph-layout-stale-node.ttrg', ['ttr/graph-layout-stale-node', 'ttr/graph-name-mismatch']],
       ['search-fuzzy-without-searchable.ttr', ['ttr/fuzzy-without-searchable']],
       ['search-duplicate-subproperty.ttr', ['ttr/duplicate-search-property']],
     ];
@@ -185,10 +187,9 @@ describe('parser integration', () => {
     });
 
     // N/A fixtures: documented in samples/broken/v1.1/README.md as not emittable
-    // under the order-strict grammar (file-ordering) / the IDENT-keyed layout
-    // grammar (graph-layout-stale-node). They parse-error by design until C1.
+    // under the order-strict grammar (file-ordering). graph-layout-stale-node is now
+    // fixed (unquoted keys) and covered above.
     it.skip('file-ordering.ttr — N/A (order-strict grammar; see README)', () => {});
-    it.skip('graph-layout-stale-node.ttrg — N/A (layout needs qname keys; C1)', () => {});
   });
 
   it('parses all sample files (non-broken) without errors', async () => {

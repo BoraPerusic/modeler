@@ -16,7 +16,8 @@ These files contain intentional defects. They are consumed by tests and manual s
 | `ambiguous-reference.ttr` | `ttr/ambiguous-reference` | Bare ref `shared_name` matches defs in 2 wildcard-imported packages |
 | `wrong-file-kind.ttr` | `ttr/wrong-file-kind` | `.ttr` file contains both a `graph` block and top-level `def` statements |
 | `graph_object_not_found.ttrg` | `ttr/graph-object-not-found` | `.ttrg` `objects` references `er.entity.nonexistent` which doesn't exist |
-| `graph-layout-stale-node.ttrg` | `ttr/graph-layout-stale-node` | **N/A — blocked on C1:** the grammar's `layout.nodes` map requires IDENT keys; qname-keyed nodes (with dots) cannot parse. |
+| `graph-missing.ttrg` | `ttr/wrong-file-kind` | `.ttrg` file contains only a schema directive (no `graph` block) |
+| `graph-layout-stale-node.ttrg` | `ttr/graph-layout-stale-node`, `ttr/graph-name-mismatch` | `.ttrg` `layout.nodes` references `er.entity.nonexistent` which is not in `objects`; graph name `artikl` does not match file stem |
 | `graph_objects_empty.ttrg` | `ttr/graph-objects-empty` | `.ttrg` has `objects: []` |
 | `graph_name_mismatch.ttrg` | `ttr/graph-name-mismatch` | File stem `graph_name_mismatch.ttrg` contains `graph wrong_name { ... }` |
 | `file-ordering.ttr` | `ttr/file-ordering` | **Note:** grammar is order-strict; this fixture cannot currently emit the diagnostic. Kept for completeness. |
@@ -40,7 +41,3 @@ The guardrail test `tests/integration/src/integration.test.ts` → `describe('v1
 ### `ttr/file-ordering`
 
 The grammar is order-strict (`packageDecl? importDecl* (schemaDirective | graphBlock)? definition* EOF`). Out-of-order files produce `ttr/parse-error`, not `ttr/file-ordering`. The `file-ordering.ttr` fixture is included for completeness but will not emit `ttr/file-ordering` under normal parsing. The diagnostic is a placeholder for a future formatter that operates on a permissive AST builder.
-
-### `ttr/graph-layout-stale-node`
-
-The grammar's `layout.nodes` property accepts an `object_` production whose `key` is an `id` (IDENT token). Qname-keyed layout nodes like `"er.entity.nonexistent": { x: 100, y: 100 }` cannot parse because qnames contain dots that are tokenised as punctuation, not IDENT. This is a C1 grammar gap — the fixture is present for completeness but will not emit the diagnostic until the grammar supports string/qname keys in layout nodes.

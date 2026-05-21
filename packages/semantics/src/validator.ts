@@ -333,6 +333,15 @@ export class Validator {
 
     const fileName = _uri.replace(/^.*[\/\\]/, '').replace(/\.ttrg$/, '');
 
+    if (!graph.schema) {
+      diagnostics.push({
+        code: DiagnosticCode.RequiredPropertyMissing,
+        severity: 'error',
+        message: "graph requires a 'schema' property (e.g. schema: er)",
+        source: graph.source,
+      });
+    }
+
     if (graph.objects && graph.objects.length === 0) {
       diagnostics.push({
         code: DiagnosticCode.GraphObjectsEmpty,

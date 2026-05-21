@@ -1,6 +1,6 @@
 # v1.1 — Contracts
 
-**Status:** v2, 2026-05-18. Companion to [`docs/v1-1/design/v1.1-packages-and-graphs.md`](v1.1-packages-and-graphs.md), [`docs/v1-1/design/grammar-v1-1-changes.md`](grammar-v1-1-changes.md), and the per-sub-phase mini-task-lists under [`docs/v1-1/plan/tasks/`](../plan/tasks/).
+**Status:** v5, 2026-05-21. Companion to [`docs/v1-1/design/v1.1-packages-and-graphs.md`](v1.1-packages-and-graphs.md), [`docs/v1-1/design/grammar-v1-1-changes.md`](grammar-v1-1-changes.md), and the per-sub-phase mini-task-lists under [`docs/v1-1/plan/tasks/`](../plan/tasks/).
 
 **Audience:** the implementer (junior dev or coding agent) executing v1.1. The contracts here are non-negotiable — every type, every method signature, every grammar token, every diagnostic code is the single source of truth. If a mini-task-list shows a snippet that conflicts with this document, **this document wins**. Open a PR against this file to amend.
 
@@ -378,9 +378,9 @@ graph artikl_overview {
     layout: {
         viewport: { zoom: 1.0, panX: 0, panY: 0, displayMode: "with-types" },
         nodes: {
-            "billing.invoicing.er.entity.artikl":    { x: 320, y: 180 },
-            "billing.products.er.entity.produkt":    { x: 580, y: 180 },
-            "billing.products.er.entity.podprodukt": { x: 580, y: 380 }
+            billing.invoicing.er.entity.artikl:    { x: 320, y: 180 },
+            billing.products.er.entity.produkt:    { x: 580, y: 180 },
+            billing.products.er.entity.podprodukt: { x: 580, y: 380 }
         },
         edges: {}
     }
@@ -714,6 +714,7 @@ export interface CreateGraphWizardProps {
 
 ## 12. Changelog
 
+- **v5, 2026-05-21** — §7.1 `layout.nodes` keys changed from quoted strings to unquoted dotted-ids (grammar `key : id` accepts only unquoted ids; `setLayout` will emit unquoted — see C2.7).
 - **v4, 2026-05-19** — clarified §3.1: removed the "(v1 shape, unchanged)" parenthetical, which was inaccurate. v1.1's qname construction always uses the kind as namespace fallback when no `namespace` clause is present; this changes the shape for unpackaged, no-namespace files (e.g. `db.users` → `db.table.users`). Stock-cnc doubling rule unchanged.
 - **v3, 2026-05-19** — relaxed GraphLayout.viewport.displayMode in §2 from the three-member union to string; the union narrowing now happens in semantics, not parsing. Designer's DisplayMode in §11.2 unchanged.
 - **v2, 2026-05-18** — added §11 (Designer state types) reflecting the locked schema-toggle-removed decision; added `ttr/graph-objects-empty` and `ttr/graph-name-mismatch` to §6.
