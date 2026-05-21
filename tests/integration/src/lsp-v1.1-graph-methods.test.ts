@@ -6,6 +6,7 @@ import path from 'path';
 import { writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { parseString } from '@modeler/parser';
 
 function createPairedConnection(): { client: lsp.Connection; server: lsp.Connection } {
   const clientTransport = new PassThrough({ objectMode: true });
@@ -344,6 +345,32 @@ def relation artikl_dobropis { from: er.entity.artikl, to: er.entity.dobropis, c
 
     expect(result.documentChanges).toBeDefined();
     expect((result.documentChanges as any[]).length).toBeGreaterThan(0);
+  });
+
+  it('C2.4 F1.3 createGraph edit is applied and result is loadable and parsable', async () => {
+    const newGraphPath = join(tmpDir, 'roundtrip_graph.ttrg');
+    const result = await client.sendRequest('modeler/createGraph', {
+      uri: `file://${newGraphPath}`,
+      name: 'roundtrip_graph',
+      schema: 'er',
+      packages: [],
+      objects: [],
+    }) as { documentChanges?: any[] };
+
+    expect(result.documentChanges).toBeDefined();
+    const createOp = result.documentChanges.find((c: any) => c.kind === 'create');
+    const textEdit = result.documentChanges.find((c: any) => c.edits);
+    expect(createOp).toBeDefined();
+    expect(textEdit).toBeDefined();
+
+    const newContent = textEdit.edits[0].newText as string;
+    expect(newContent).toContain('graph roundtrip_graph');
+    expect(newContent).toContain('schema: er');
+
+    const parsed = parseString(newContent, `file://${newGraphPath}`);
+    expect(parsed.errors).toHaveLength(0);
+    expect(parsed.ast?.graph).toBeDefined();
+    expect(parsed.ast?.graph?.name).toBe('roundtrip_graph');
   });
 
   it('C2.5 getPackageGraph returns package structure', async () => {

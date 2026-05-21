@@ -4,6 +4,7 @@ import { Header } from './components/Header';
 import { Canvas } from './components/Canvas';
 import { GraphPicker } from './components/GraphPicker';
 import { InspectorPanel } from './components/InspectorPanel';
+import { CreateGraphWizard } from './CreateGraphWizard';
 import { NlPane } from './components/NlPane';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { createLspClient } from './lsp-client';
@@ -228,6 +229,19 @@ function App() {
       )}
       {!hasProject ? (
         <LandingCard onLoadProject={handleDirPick} onOpenDemo={handleOpenDemo} />
+      ) : state.creatingGraph ? (
+        clientRef.current && (
+          <CreateGraphWizard
+            lspClient={clientRef.current}
+            projectRoot={state.projectUri ?? ''}
+            onComplete={(graphUri) => {
+              dispatch({ type: 'cancelCreateWizard' });
+              handleSelectGraph(graphUri);
+            }}
+            onCancel={() => dispatch({ type: 'cancelCreateWizard' })}
+            onError={(msg) => dispatch({ type: 'setError', message: msg })}
+          />
+        )
       ) : showPicker ? (
         <GraphPicker
           graphs={state.availableGraphs}
