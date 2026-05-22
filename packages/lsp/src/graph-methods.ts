@@ -37,10 +37,6 @@ function getAllTtrgUris(documents: Map<string, string>): string[] {
   return [...documents.keys()].filter((uri) => uri.endsWith('.ttrg'));
 }
 
-function buildQname(schemaCode: string, namespace: string, parts: string[]): string {
-  return [schemaCode, namespace, ...parts].filter((s) => s !== '').join('.');
-}
-
 function parseAllDocs(documents: Map<string, string>): Map<string, Document> {
   const docs = new Map<string, Document>();
   for (const [uri, content] of documents) {
@@ -50,8 +46,8 @@ function parseAllDocs(documents: Map<string, string>): Map<string, Document> {
   return docs;
 }
 
-function buildQnameToDef(asts: Document[]): Map<string, { def: Definition; schemaCode: string; namespace: string }> {
-  const map = new Map<string, { def: Definition; schemaCode: string; namespace: string }>();
+function buildQnameToDef(asts: Document[]): Map<string, { def: Definition; schemaCode: string; namespace: string; packageName: string }> {
+  const map = new Map<string, { def: Definition; schemaCode: string; namespace: string; packageName: string }>();
   for (const ast of asts) {
     const schemaCode = ast.schemaDirective?.schemaCode ?? 'er';
     const namespace = ast.schemaDirective?.namespace ?? '';
@@ -64,7 +60,7 @@ function buildQnameToDef(asts: Document[]): Map<string, { def: Definition; schem
 }
 
 function addDefAndChildren(
-  map: Map<string, { def: Definition; schemaCode: string; namespace: string }>,
+  map: Map<string, { def: Definition; schemaCode: string; namespace: string; packageName: string }>,
   def: Definition,
   schemaCode: string,
   namespace: string,
@@ -73,10 +69,10 @@ function addDefAndChildren(
   const segments: string[] = [];
   if (packageName) segments.push(packageName);
   segments.push(schemaCode);
-  if (namespace) segments.push(namespace);
+  segments.push(namespace || def.kind);
   segments.push(def.name);
   const qname = segments.join('.');
-  map.set(qname, { def, schemaCode, namespace });
+  map.set(qname, { def, schemaCode, namespace, packageName });
 
   const children: Definition[] = [];
   if (def.kind === 'entity' && def.attributes) children.push(...def.attributes);
@@ -91,7 +87,7 @@ function addDefAndChildren(
   for (const child of children) {
     const childSegments = [...segments, child.name];
     const childQname = childSegments.join('.');
-    map.set(childQname, { def: child, schemaCode, namespace });
+    map.set(childQname, { def: child, schemaCode, namespace, packageName });
   }
 }
 
@@ -157,8 +153,6 @@ export function getGraph(
 
   const missingObjects = graph.objects.filter((qname) => !qnameToDef.has(qname));
 
-  const edges = computeGraphEdges(graph, [...allDocs.values()]);
-
   const nodes: ModelGraphNode[] = [];
 
   for (const objQname of objectSet) {
@@ -171,6 +165,8 @@ export function getGraph(
       nodes.push(node);
     }
   }
+
+  const edges = computeGraphEdges(graph, [...allDocs.values()], qnameToDef);
 
   const layout: GraphLayoutOutput = {
     viewport: graph.layout?.viewport ? {

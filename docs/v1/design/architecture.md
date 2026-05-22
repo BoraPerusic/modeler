@@ -22,7 +22,7 @@ Eight strategic decisions taken during the design conversation; everything below
 |---|---|---|---|
 | D1 | Parser/semantic-layer strategy | Strategy A — TypeScript LSP server consumed by all three hosts; parser regenerated from grammar with `antlr4ng` | Static-site-friendly Designer, no JVM dep for VS Code, IntelliJ via LSP4IJ; ai-platform's Kotlin parser stays for runtime, both regenerate from the same `.g4` |
 | D2 | Grammar ownership | Modeler owns `grammar/TTR.g4`; ai-platform vendors a copy synced via CI | The language tooling project owns the language definition; clearer change-control |
-| D3 | Designer ↔ TTR sync | Pattern γ — Designer issues structured graph edits via custom LSP requests; LSP synthesises text edits; node positions live in `.ttrl` sidecars **(superseded in v1.1: layout now lives in each `.ttrg` file's `layout` block — see `docs/v1-1/` D4)** | Text remains canonical for the language; layout lives where it belongs; comments and formatting are preserved |
+| D3 | Designer ↔ TTR sync | Pattern γ — Designer issues structured graph edits via custom LSP requests; LSP synthesises text edits; node positions live in each `.ttrg` file's `layout` block **(v1.1: supersedes the v1 `.ttrl` sidecar — see decision D4 in `docs/v1-1/design/v1.1-packages-and-graphs.md`)** | Text remains canonical for the language; layout lives where it belongs; comments and formatting are preserved |
 | D4 | Project model | Convention-by-default; optional `modeler.toml` manifest | Lowest onboarding friction; manifest available when projects grow |
 | D5 | LSP / VS Code v1 scope | Foundation tier (highlighting, syntax-error diagnostics, brackets) + Core tier (cross-reference resolution, undefined-ref diagnostics, go-to-definition, find-references, hover) | Enough to deliver the "I trust this language now" moment; Productivity (completion) and Polish (rename/format/code actions) ship in v1.1+ |
 | D6 | Build sequence | Sequence II — vertical thin slice end-to-end first (LSP minimum + VS Code minimum + Designer minimum), then iterate | Continuous demo-able progress; early integration learnings; avoids the over-engineering risk of "LSP-first" |
@@ -128,11 +128,19 @@ The semantic layer that the parser deliberately omits. Three sub-modules:
 
 The semantics layer is what makes diagnostics meaningful. The grammar catches "you wrote `:` where `=` was expected." The semantics layer catches "you referred to `er.entity.artiklu` but no such entity is defined." That second class of diagnostic is by far the more useful one in practice.
 
-**Stock vocabulary loading.** The semantics layer pre-loads ai-platform's stock vocabulary (currently the six built-in CNC roles: `fact`, `dimension`, `structural`, `master`, `transaction`, `bridge`) so user files that reference them resolve cleanly without the user having to declare them. The stock vocabulary lives as `.ttr` files in `@modeler/semantics/src/stock/` (synced from ai-platform's `BuiltinStockSource` via the same script that syncs the grammar).
+**Stock vocabulary loading.** The semantics layer auto-imports `cnc.*` — every package can reference `cnc.role.*` with no explicit import declaration. Stock roles live in `package cnc`; qnames resolve internally to `cnc.cnc.role.<defName>`. The stock vocabulary is bundled with `@modeler/semantics` and loaded before any user files.
+
+**Package model.** Every `.ttr` file belongs to exactly one package (declared via `package <qualified-name>` at the top). Files without a declaration belong to the default (root) package. The default package is represented by the absence of a declaration — not by `package ` with no name. Package declarations affect two things: (1) the qname prefix for defs in the file (`billing.invoicing.er.entity.artikl` for a file declaring `package billing.invoicing`), and (2) import-based resolution — defs in the same package are visible to each other without explicit imports; defs in other packages require either a named `import` or a wildcard `import <pkg>.*`.
 
 ### 4.4 Edit synthesizer (`@modeler/edit`)
 
-Translates structured graph operations into LSP `WorkspaceEdit` objects — the standard wire format for "patch these lines in these files." The Designer's `modeler/applyGraphEdit` request flows into this package. Per D7, the Designer ships read-only in v1; this package is a placeholder until v1.1 when edit mode lands.
+**v1.1:** The edit synthesizer is now **load-bearing** — no longer a placeholder. Two concrete uses:
+
+1. **`modeler/addObjectToGraph` / `modeler/removeObjectFromGraph`** — the Designer issues these when the user clicks "Add object" or "Remove from graph". The synthesizer produces a `WorkspaceEdit` that mutates the target `.ttrg` file's `objects` list.
+
+2. **`textDocument/rename`** — when the user renames a `def` anywhere in the project, the synthesizer rewrites every `.ttrg` file that lists the renamed object's qname, plus all referencing `.ttr` files.
+
+The synthesizer uses the parser's CST view to know exactly where blocks start and end, what the prevailing indentation is, and whether commas are used as separators in the surrounding context. The output is always a `WorkspaceEdit` object the host applies via the standard LSP path.
 
 Operations to support in v1.1:
 
@@ -231,6 +239,10 @@ A "TTR project" is the smallest closed unit for cross-reference resolution. The 
 1. Walking up from the file looking for a `modeler.toml`. If found, that directory is the project root and the manifest configures the project.
 2. Otherwise, treating the LSP `workspaceFolder` as the project root and using convention defaults.
 
+**Package model (v1.1).** Every file belongs to a package. The package name is derived from its directory relative to the project root: `<root>/foo/bar/baz.ttr` → `package foo.bar`. A file can optionally declare its own package with `package <qualified-name>`; if present and the declaration does not match the path-inferred name, the validator emits `ttr/package-declaration-mismatch`. Files in the project root with no declaration are in the **default (root) package** — represented by the absence of a declaration, not by `package ` with no name.
+
+Cross-package references require an explicit import. Same-package references always resolve without imports.
+
 The `modeler.toml` schema (TOML chosen for editability and the small set of types we need):
 
 ```toml
@@ -256,32 +268,25 @@ require-descriptions = false       # require `description` on every def
 
 All keys are optional; missing values use the same defaults convention-by-default would apply.
 
-## 6. Layout sidecar (`.ttrl`) format
+## 6. Layout in `.ttrg` files (supersedes the v1 `.ttrl` sidecar)
 
-> **Superseded in v1.1.** The standalone `.ttrl` sidecar described below was removed in v1.1 (decision D4). Layout now lives inside each `.ttrg` file's `layout` block (unquoted dotted-id node keys; see `docs/v1-1/design/v1-1-contracts.md` §7.1), read/written via the `graphUri`-scoped `modeler/getLayout` / `modeler/setLayout` methods (contracts §8). The v1 sidecar format below is retained only as historical record.
+> **Superseded in v1.1.** The standalone `.ttrl` sidecar was removed in v1.1 (decision D4). Layout now lives inside each `.ttrg` file's `layout` block. The contract: node keys are **unquoted dotted-id strings** (e.g. `billing.invoicing.er.entity.artikl: { x: 320, y: 180 }`). The `.ttrl` format below is retained only as historical record.
 
-One `.ttrl` per project, stored at `<project-root>/.modeler/layout.ttrl`. JSON; managed by the LSP, never hand-edited (though structured so it's not actively user-hostile if someone opens it). Schema:
+One `.ttrg` per graph, stored at `<project-root>/graphs/<name>.ttrg`. The `layout` block is managed by the LSP via `modeler/getLayout` / `modeler/setLayout` (both now take a `graphUri` parameter). Hosts never touch the layout directly.
 
-```json
-{
-  "version": 1,
-  "viewports": {
-    "db": { "zoom": 1.0, "panX": 0, "panY": 0, "displayMode": "with-types" },
-    "er": { "zoom": 1.0, "panX": 0, "panY": 0, "displayMode": "with-types" }
-  },
-  "nodes": {
-    "db.dbo.QZBOZI_DF": { "x": 320, "y": 180 },
-    "er.entity.artikl": { "x": 200, "y": 100 }
-  },
-  "edges": {
-    "db.dbo.fk_QZBOZI_QSKUPZBOZI": { "bendPoints": [[280, 200]] }
+Layout schema inside `.ttrg`:
+
+```
+layout: {
+  viewport: { zoom: 1.0, panX: 0, panY: 0, displayMode: "with-types" },
+  nodes: {
+    <unquoted-qname>: { x: <number>, y: <number> },
+    ...
   }
 }
 ```
 
-Per-`viewport.displayMode` values: `just-names | with-types | with-constraints | with-indices | full`. Granularity per schema because different schemas naturally want different defaults (db wants "with-types"; er wants "just-names" by default).
-
-The LSP owns reading and writing this file. Hosts never touch it directly. This keeps layout consistent regardless of which host the user is editing in.
+Per-`viewport.displayMode` values: `just-names | with-types | with-constraints | with-indices | full`.
 
 ## 7. Repository structure
 
@@ -391,8 +396,10 @@ If a future feature wants live integration (e.g. "validate this model against th
 3. **TTR formatter rules.** Deferred to v1.2 with `format-document`. Rules to settle: where to break long property lists, how to reformat triple-string blocks, whether to enforce `:` or `=` as the property separator (or leave alone).
 4. **Bundled Node for IntelliJ.** Deferred — v1 ships the IntelliJ plugin without bundled Node; users must have Node on PATH.
 5. **Designer file-system access in browser.** Resolved in Phase 3: uses File System Access API (Chromium) with a hidden `<input webkitdirectory>` fallback for Safari and non-supporting browsers.
-6. **Stock-vocabulary sync mechanism.** Resolved in Phase 2: stock vocabulary (`cnc.role.*`) is loaded via `loadStockVocabularies()` in the semantics layer; no external sync script needed in v1.
-7. **Edit synthesizer — handling of existing comments adjacent to insertions.** Deferred to v1.x — edit mode is not available in v1; `modeler/applyGraphEdit` returns `{ ok: false, reason: 'edit-mode-not-available-in-v1' }`.
+6. **Stock-vocabulary sync mechanism.** Resolved in v1.1: `cnc.*` is auto-imported by the semantics layer; no external sync script needed.
+7. **Edit synthesizer — handling of existing comments adjacent to insertions.** Resolved in v1.1: the synthesizer uses CST-based insertion that preserves adjacent trivia.
+
+~~8. **Layout persistence between sessions.**~~ Resolved in v1.1: layout lives in each `.ttrg` file's `layout` block; `modeler/setLayout` returns a `WorkspaceEdit` the host applies.
 
 These don't block Phase 0; they get resolved as the relevant work lands.
 
@@ -421,10 +428,8 @@ In the GitHub Pages deployment, the Designer is a static React app served from `
 │                                    └─────────────────────┘
 ```
 
-Communication: the LSP Web Worker is instantiated by the Designer via `new Worker(new URL('@modeler/lsp/browser?worker', import.meta.url))`. The LSP protocol (initialize, textDocument/didOpen, etc.) runs over `postMessage`. Layout persistence is handled via `modeler/setLayout` / `modeler/getLayout` custom requests. **(v1.1: layout is read from / written to the `layout` block inside the target `.ttrg` file — `setLayout` returns a `WorkspaceEdit` the host applies — not a `.modeler/layout.ttrl` sidecar. See decision D4 and contracts §8.)**
+Communication: the LSP Web Worker is instantiated by the Designer via `new Worker(new URL('@modeler/lsp/browser?worker', import.meta.url))`. The LSP protocol (initialize, textDocument/didOpen, etc.) runs over `postMessage`. Layout persistence is handled via `modeler/setLayout` / `modeler/getLayout` with a `graphUri` parameter — reading from / writing to the `layout` block inside the target `.ttrg` file.
 
-Key behaviour:
-- **Schema toggle**: cached in `graphsBySchema`; only re-fetches from LSP when cache is null
-- **Layout persistence**: debounced saves on `dragfreeon` (500ms), `viewport` (750ms), `layoutstop` (immediate); restored on project open via `useLayoutSync`
-- **Selection → detail**: `selectedSymbol?.qname` drives a `useEffect` that calls `modeler/getSymbolDetail`; result displayed in `InspectorPanel`
-- **No edit mode in v1**: `modeler/applyGraphEdit` is a no-op placeholder
+**Graph-centric flow (v1.1):** The Designer does not render the entire project at once. Instead, it opens one `.ttrg` file at a time, scoped to a specific schema and set of objects. The user picks a graph (or creates a new one via the wizard); the LSP's `modeler/getGraph(graphUri)` returns the graph's nodes, edges, layout, and any `missingObjects`. The Designer renders that graph.
+
+**Add / remove object:** clicking "Add object" calls `modeler/addObjectToGraph(graphUri, qname)` → `WorkspaceEdit` that appends the qname to the target `.ttrg`'s `objects` list. The LSP re-parses and the Designer re-fetches to update the render.

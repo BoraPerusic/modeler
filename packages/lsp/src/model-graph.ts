@@ -500,7 +500,11 @@ export function buildModelGraph(ast: Document, schema: RenderableSchemaCode, pre
 // (contract §7.1, decision D2). Endpoints resolve via resolveRef against the
 // objects set -- NOT the six-step Resolver. Bare/wildcard-imported objects in
 // a .ttrg will not resolve here.
-export function computeGraphEdges(graph: GraphBlock, asts: Document[]): ModelGraphEdge[] {
+export function computeGraphEdges(
+  graph: GraphBlock,
+  asts: Document[],
+  _qnameToDef?: Map<string, { def: Definition; schemaCode: string; namespace: string; packageName: string }>
+): ModelGraphEdge[] {
   const objectSet = new Set(graph.objects ?? []);
   if (objectSet.size === 0) return [];
 
@@ -509,9 +513,15 @@ export function computeGraphEdges(graph: GraphBlock, asts: Document[]): ModelGra
   for (const ast of asts) {
     const schemaCode = ast.schemaDirective?.schemaCode ?? 'er';
     const namespace = ast.schemaDirective?.namespace ?? '';
+    const packageName = ast.packageDecl?.name ?? '';
 
     for (const def of ast.definitions) {
-      const defQname = buildQname(schemaCode, namespace, [def.name]);
+      const segments: string[] = [];
+      if (packageName) segments.push(packageName);
+      segments.push(schemaCode);
+      segments.push(namespace || def.kind);
+      segments.push(def.name);
+      const defQname = segments.join('.');
       if (!objectSet.has(defQname)) continue;
       const edge = buildEdgeForDef(def, schemaCode, namespace, objectSet);
       if (edge) edges.push(edge);

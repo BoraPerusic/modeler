@@ -7,10 +7,19 @@ The grammar lives in `packages/grammar/src/TTR.g4`. Sample projects are under `s
 ## What ships in v1
 
 - **VS Code extension** — `.ttr` syntax highlighting, diagnostics, hover, go-to-definition, find-references, workspace symbol search.
-- **Graphical Designer** — read-only React + Cytoscape.js renderer for `db` and `er` schemas. Display-mode toggle (just-names / with-types / with-constraints), schema toggle (db ↔ er), inspector panel with symbol details and reference navigation, layout persistence (node positions + per-schema viewport + display mode round-trip through `.modeler/layout.ttrl`). Deployed via GitHub Pages; `?demo=v1-metadata` query loads the sample project without an upload.
+- **Graphical Designer** — read-only React + Cytoscape.js renderer for `db` and `er` schemas. Display-mode toggle (just-names / with-types / with-constraints), schema toggle (db ↔ er), inspector panel with symbol details and reference navigation, per-graph layout persistence via `.ttrg` files. Deployed via GitHub Pages; `?demo=v1-metadata` query loads the sample project without an upload.
 - **Tatrman LSP** — single TypeScript server, two transports: stdio for VS Code / IntelliJ, Web Worker for the Designer. Custom `modeler/*` methods documented in [packages/lsp/README.md](packages/lsp/README.md).
 
-Edit mode (round-tripping graph edits back into `.ttr` text) lands in v1.1; `modeler/applyGraphEdit` is a stub returning `{ ok: false }` in v1.
+## What ships in v1.1
+
+- **Package model** — every `.ttr` file declares `package <qualified-name>` at the top; the directory structure determines the package name.
+- **Import system** — cross-package references require explicit `import` statements; same-package references resolve without imports.
+- **`.ttrg` graph files** — a `.ttrg` file describes a graph (schema + object list + layout). Multiple `.ttrg` files per project, each scoped to a subset of the model.
+- **Migration CLI** — `pnpm exec modeler-migrate <project-root>` converts a v1 project to v1.1: inserts `package` declarations, produces `import` statements, converts `.modeler/layout.ttrl` to per-graph `.ttrg` files.
+- **Add / Remove object** — the Designer can add or remove objects from a graph via `modeler/addObjectToGraph` / `modeler/removeObjectFromGraph`.
+- **Graph-centric entry** — three ways to open a graph: open an existing `.ttrg`, browse project graphs via `modeler/listGraphs`, or create a new graph via a wizard.
+
+Edit mode (round-tripping graph edits back into `.ttr` text) and rename propagates into `.ttrg` files in v1.1; `modeler/applyGraphEdit` is a stub returning `{ ok: false }` in v1.
 
 ## Architecture
 
@@ -20,7 +29,7 @@ The v1.1 design (packages, imports, and `.ttrg` graph files) lives under [docs/v
 
 ## Status and current work
 
-The version V1 is ready and shipped. We are currently developing the v1-1, according to the plan [docs/v1-1/plan/implementation-plan-v1.1.md](docs/v1-1/plan/implementation-plan-v1.1.md).
+The version V1 is shipped. The v1.1 release (packages, imports, `.ttrg` graph files, migration CLI) is complete. We are currently developing v1.2, according to the plan [docs/v1-1/plan/implementation-plan-v1.1.md](docs/v1-1/plan/implementation-plan-v1.1.md) (the v1.2 plan will be added as a new document).
 
 
 ## Developing locally

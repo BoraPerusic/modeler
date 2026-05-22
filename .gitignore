@@ -5,3 +5,4 @@ dist/
 .pnpm-store/
 generated/
 /*.ttrl
+.modeler/

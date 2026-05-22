@@ -135,7 +135,7 @@ describe('Phase 3 custom LSP methods', () => {
   });
 
   it('4.4 getSymbolDetail for er.entity.artikl returns Czech label, description, perKindData, referencedBy', async () => {
-    const ttrFiles = await getAllTtrFiles(samplesDir, ['broken', 'v1-mini']);
+    const ttrFiles = await getAllTtrFiles(samplesDir, ['broken', 'v1-mini', 'v1.1-mini', 'v1.1-metadata', 'v1.1-mini-migrated']);
     for (const file of ttrFiles) {
       const content = await import('fs/promises').then(fs => fs.readFile(file, 'utf-8'));
       client.sendNotification('textDocument/didOpen', {
@@ -168,7 +168,7 @@ describe('Phase 3 custom LSP methods', () => {
   }, 10000);
 
   it('4.5 getModelGraph with schema db on multi-file project returns >= 5 edges', async () => {
-    const ttrFiles = await getAllTtrFiles(samplesDir, ['broken', 'v1-mini']);
+    const ttrFiles = await getAllTtrFiles(samplesDir, ['broken', 'v1-mini', 'v1.1-mini', 'v1.1-metadata', 'v1.1-mini-migrated']);
     for (const file of ttrFiles) {
       const content = await import('fs/promises').then(fs => fs.readFile(file, 'utf-8'));
       client.sendNotification('textDocument/didOpen', {
@@ -202,7 +202,7 @@ describe('Phase 3 custom LSP methods', () => {
   }, 10000);
 
   it('4.5b getModelGraph with schema er returns relation edges with from/toCardinality and localized entity labels', async () => {
-    const ttrFiles = await getAllTtrFiles(samplesDir, ['broken', 'v1-mini']);
+    const ttrFiles = await getAllTtrFiles(samplesDir, ['broken', 'v1-mini', 'v1.1-mini', 'v1.1-metadata', 'v1.1-mini-migrated']);
     for (const file of ttrFiles) {
       const content = await import('fs/promises').then(fs => fs.readFile(file, 'utf-8'));
       client.sendNotification('textDocument/didOpen', {
@@ -265,7 +265,7 @@ describe('Phase 3 custom LSP methods', () => {
   }, 10000);
 
   it('4.6 getSymbolDetail for a column qname returns null in v1 (nested-qname limitation)', async () => {
-    const ttrFiles = await getAllTtrFiles(samplesDir, ['broken', 'v1-mini']);
+    const ttrFiles = await getAllTtrFiles(samplesDir, ['broken', 'v1-mini', 'v1.1-mini', 'v1.1-metadata', 'v1.1-mini-migrated']);
     for (const file of ttrFiles) {
       const content = await import('fs/promises').then(fs => fs.readFile(file, 'utf-8'));
       client.sendNotification('textDocument/didOpen', {

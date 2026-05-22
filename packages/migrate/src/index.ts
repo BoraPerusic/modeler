@@ -65,14 +65,13 @@ function leadingCommentLines(content: string): string[] {
 
 export function insertPackageDecl(content: string, packageName: string): string {
   if (/^package\s/m.test(content)) return content;
+  if (packageName === '') return content;
   const commentLines = leadingCommentLines(content);
   if (commentLines.length > 0) {
     const commentBlock = commentLines.join('\n') + '\n';
     const afterComments = content.slice(commentBlock.length);
-    if (packageName === '') return content;
     return commentBlock + `package ${packageName}\n` + afterComments;
   }
-  if (packageName === '') return content;
   return `package ${packageName}\n` + content;
 }
 
@@ -99,7 +98,6 @@ export function scanCrossReferences(
   // from the qname string.
   const byPackage = new Map<string, string[]>();
   for (const entry of projectSymbols) {
-    if (entry.packageName === fromPackage) continue;
     let list = byPackage.get(entry.packageName);
     if (!list) {
       list = [];
@@ -129,6 +127,7 @@ export function scanCrossReferences(
       continue;
     }
     const { pkg } = matches[0];
+    if (pkg === fromPackage) continue;
     let set = refsByPackage.get(pkg);
     if (!set) {
       set = new Set<string>();
