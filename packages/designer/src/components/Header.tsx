@@ -14,6 +14,8 @@ interface HeaderProps {
   onDirPick: () => void;
   onBack: () => void;
   onOpenFile: () => void;
+  onAddObject: () => void;
+  onMissingObjectsBadgeClick: () => void;
   onDownloadLayout?: () => void;
 }
 
@@ -29,6 +31,8 @@ export function Header({
   onDirPick,
   onBack,
   onOpenFile,
+  onAddObject,
+  onMissingObjectsBadgeClick,
   onDownloadLayout,
 }: HeaderProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -60,12 +64,13 @@ export function Header({
           {hasGraph ? graphName : 'TTR Modeler Designer'}
         </h1>
         {hasGraph && missingObjectsCount > 0 && (
-          <span
-            className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded border border-amber-300 cursor-help"
+          <button
+            onClick={onMissingObjectsBadgeClick}
+            className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded border border-amber-300 cursor-pointer hover:bg-amber-200 transition-colors"
             title={`${missingObjectsCount} object(s) no longer exist in the project`}
           >
             {missingObjectsCount} stale
-          </span>
+          </button>
         )}
       </div>
       <div className="flex items-center gap-4">
@@ -88,6 +93,15 @@ export function Header({
         >
           NL
         </button>
+        {hasGraph && (
+          <button
+            onClick={onAddObject}
+            className="px-3 py-2 text-sm bg-emerald-500 text-white rounded hover:bg-emerald-600 transition-colors"
+            title="Add an object to the current graph"
+          >
+            + Add object
+          </button>
+        )}
         <button
           onClick={onOpenFile}
           className="px-4 py-2 text-sm bg-slate-100 text-gray-700 border border-slate-300 rounded hover:bg-slate-200 transition-colors"

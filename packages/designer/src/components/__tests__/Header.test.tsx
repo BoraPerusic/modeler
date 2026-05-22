@@ -20,6 +20,8 @@ describe('Header', () => {
         onDirPick={vi.fn()}
         onBack={vi.fn()}
         onOpenFile={vi.fn()}
+        onAddObject={vi.fn()}
+        onMissingObjectsBadgeClick={vi.fn()}
       />
     );
     expect(screen.getByText('TTR Modeler Designer')).toBeInTheDocument();
@@ -39,12 +41,15 @@ describe('Header', () => {
         onDirPick={vi.fn()}
         onBack={vi.fn()}
         onOpenFile={vi.fn()}
+        onAddObject={vi.fn()}
+        onMissingObjectsBadgeClick={vi.fn()}
       />
     );
     expect(screen.getByText('artikl_overview')).toBeInTheDocument();
   });
 
   it('shows stale badge when missingObjectsCount > 0', () => {
+    const onMissingObjectsBadgeClick = vi.fn();
     render(
       <Header
         graphName="artikl_overview"
@@ -58,9 +63,13 @@ describe('Header', () => {
         onDirPick={vi.fn()}
         onBack={vi.fn()}
         onOpenFile={vi.fn()}
+        onAddObject={vi.fn()}
+        onMissingObjectsBadgeClick={onMissingObjectsBadgeClick}
       />
     );
     expect(screen.getByText('3 stale')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('3 stale'));
+    expect(onMissingObjectsBadgeClick).toHaveBeenCalledOnce();
   });
 
   it('does not show stale badge when missingObjectsCount is 0', () => {
@@ -77,6 +86,8 @@ describe('Header', () => {
         onDirPick={vi.fn()}
         onBack={vi.fn()}
         onOpenFile={vi.fn()}
+        onAddObject={vi.fn()}
+        onMissingObjectsBadgeClick={vi.fn()}
       />
     );
     expect(screen.queryByText('stale')).not.toBeInTheDocument();
@@ -97,6 +108,8 @@ describe('Header', () => {
         onDirPick={vi.fn()}
         onBack={vi.fn()}
         onOpenFile={vi.fn()}
+        onAddObject={vi.fn()}
+        onMissingObjectsBadgeClick={vi.fn()}
       />
     );
     fireEvent.click(screen.getByRole('button', { name: 'with types' }));
@@ -120,6 +133,8 @@ describe('Header', () => {
         onDirPick={vi.fn()}
         onBack={vi.fn()}
         onOpenFile={vi.fn()}
+        onAddObject={vi.fn()}
+        onMissingObjectsBadgeClick={vi.fn()}
       />
     );
     fireEvent.click(screen.getByRole('button', { name: /nl/i }));
@@ -141,6 +156,8 @@ describe('Header', () => {
         onDirPick={vi.fn()}
         onBack={onBack}
         onOpenFile={vi.fn()}
+        onAddObject={vi.fn()}
+        onMissingObjectsBadgeClick={vi.fn()}
       />
     );
     fireEvent.click(screen.getByRole('button', { name: '←' }));
@@ -162,6 +179,8 @@ describe('Header', () => {
         onDirPick={vi.fn()}
         onBack={vi.fn()}
         onOpenFile={onOpenFile}
+        onAddObject={vi.fn()}
+        onMissingObjectsBadgeClick={vi.fn()}
       />
     );
     fireEvent.click(screen.getByRole('button', { name: 'Open .ttrg…' }));

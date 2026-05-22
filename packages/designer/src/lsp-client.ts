@@ -29,7 +29,7 @@ export interface LspClient {
   createGraph(params: { uri: string; name: string; schema: 'db' | 'er' | 'map' | 'query' | 'cnc'; packages: string[]; objects: string[]; description?: string; tags?: string[] }): Promise<WorkspaceEdit>;
   applyGraphEdit(_params: unknown): Promise<{ ok: false; reason: string }>;
   getSymbolDetail(qname: string): Promise<SymbolDetail | null>;
-  listSymbols(options?: { kinds?: string[]; limit?: number }): Promise<Array<{ qname: string; kind: string; name: string }>>;
+  listSymbols(options?: { kinds?: string[]; limit?: number }): Promise<Array<{ qname: string; kind: string; name: string; packageName: string | null }>>;
   onDiagnostics(handler: (uri: string, messages: string[]) => void): void;
   dispose(): void;
 }
@@ -97,7 +97,7 @@ export async function createLspClient(): Promise<LspClient> {
       return connection.sendRequest('modeler/getSymbolDetail', { qname }) as Promise<SymbolDetail | null>;
     },
     async listSymbols(options) {
-      return connection.sendRequest('modeler/listSymbols', options ?? {}) as Promise<Array<{ qname: string; kind: string; name: string }>>;
+      return connection.sendRequest('modeler/listSymbols', options ?? {}) as Promise<Array<{ qname: string; kind: string; name: string; packageName: string | null }>>;
     },
     onDiagnostics(handler) {
       diagnosticHandlers.push(handler);

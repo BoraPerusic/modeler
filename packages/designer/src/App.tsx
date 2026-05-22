@@ -16,6 +16,10 @@ import { loadDemoFiles } from './fs/demo-loader';
 import { getGraphResponseToModelGraph } from './cy/adapter';
 import type { LayoutFile, DisplayMode } from '@modeler/lsp';
 import { useLayoutSync } from './hooks/useLayoutSync';
+import { AddObjectPicker } from './AddObjectPicker';
+import { MissingObjectsDrawer } from './MissingObjectsDrawer';
+import { ToastContainer, makeToast, type ToastMessage } from './Toast';
+import { applyWorkspaceEdit } from './lsp/apply-workspace-edit';
 
 function LandingCard({ onLoadProject, onOpenDemo }: { onLoadProject: () => void; onOpenDemo: () => void }) {
   return (
@@ -49,8 +53,29 @@ function App() {
   const [nlPaneOpen, setNlPaneOpen] = useState(false);
   const [clientReady, setClientReady] = useState(false);
   const [transportKind, setTransportKind] = useState<'node' | 'browser' | null>(null);
+  const [showAddPicker, setShowAddPicker] = useState(false);
+  const [showMissingDrawer, setShowMissingDrawer] = useState(false);
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const clientRef = useRef<LspClient | null>(null);
   const demoLoadingRef = useRef(false);
+  const docTextCache = useRef<Map<string, string>>(new Map());
+
+  const addToast = (message: string, kind: 'error' | 'info' = 'error') => {
+    setToasts((prev) => [...prev, makeToast(message, kind)]);
+  };
+
+  const dismissToast = (id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  };
+
+  const getText = (uri: string) => docTextCache.current.get(uri);
+
+  const openDoc = async (uri: string, content: string) => {
+    docTextCache.current.set(uri, content);
+    await clientRef.current!.openDocument(uri, content);
+  };
+
+  const currentImports: string[] = state.currentGraph?.imports ?? [];
 
   useEffect(() => {
     let cancelled = false;
@@ -83,7 +108,7 @@ function App() {
       if (!clientRef.current) return;
       return Promise.all(
         Array.from(files.files.entries()).map(([relativePath, content]) =>
-          clientRef.current!.openDocument(`file:///${demo}/${relativePath}`, content)
+          openDoc(`file:///${demo}/${relativePath}`, content)
         )
       ).then(() => {
         dispatch({ type: 'loadProject', projectUri: `file:///${demo}` });
@@ -115,7 +140,7 @@ function App() {
     if (!client) return;
     await Promise.all(
       Array.from(files.files.entries()).map(([relativePath, content]) =>
-        client.openDocument(`file:///${files.rootName}/${relativePath}`, content)
+        openDoc(`file:///${files.rootName}/${relativePath}`, content)
       )
     );
     dispatch({ type: 'loadProject', projectUri: `file:///${files.rootName}` });
@@ -143,9 +168,8 @@ function App() {
       if (!file) return;
       const content = await file.text();
       const uri = `file:///${file.name}`;
-      const client = clientRef.current;
-      if (!client) return;
-      await client.openDocument(uri, content);
+      if (!clientRef.current) return;
+      await openDoc(uri, content);
       dispatch({ type: 'loadProject', projectUri: uri });
       dispatch({ type: 'storeGraphList', graphs: [] });
       await handleSelectGraph(uri);
@@ -168,6 +192,51 @@ function App() {
 
   const handleNodeSelect = (qname: string | null) => {
     dispatch({ type: 'selectSymbol', qname });
+  };
+
+  const refetchGraph = async (uri: string) => {
+    const client = clientRef.current;
+    if (!client) return;
+    const graph = await client.getGraph(uri);
+    if (graph) {
+      dispatch({ type: 'storeGraph', graph });
+      if (graph.layout?.nodes && Object.keys(graph.layout.nodes).length > 0) {
+        dispatch({ type: 'loadLayout', layout: graph.layout });
+      }
+    }
+  };
+
+  const handleAddObject = async (qname: string, autoImport: boolean) => {
+    const client = clientRef.current;
+    const uri = state.currentGraphUri;
+    if (!client || !uri) return;
+    setShowAddPicker(false);
+    try {
+      const edit = await client.addObjectToGraph(uri, qname, autoImport);
+      if (edit?.documentChanges?.length) {
+        await applyWorkspaceEdit(edit, getText, openDoc);
+        await refetchGraph(uri);
+      } else {
+        addToast(`Couldn't add ${qname} — out of scope and auto-import is off.`);
+      }
+    } catch (err) {
+      addToast(`Failed to add object: ${err}`);
+    }
+  };
+
+  const handleRemoveNode = async (qname: string) => {
+    const client = clientRef.current;
+    const uri = state.currentGraphUri;
+    if (!client || !uri) return;
+    try {
+      const edit = await client.removeObjectFromGraph(uri, qname, true);
+      if (edit?.documentChanges?.length) {
+        await applyWorkspaceEdit(edit, getText, openDoc);
+        await refetchGraph(uri);
+      }
+    } catch (err) {
+      addToast(`Failed to remove object: ${err}`);
+    }
   };
 
   useEffect(() => {
@@ -208,6 +277,7 @@ function App() {
         onDirPick={handleDirPick}
         onBack={() => dispatch({ type: 'closeGraph' })}
         onOpenFile={handleOpenTtrg}
+        onAddObject={() => setShowAddPicker(true)}
         onDownloadLayout={async () => {
           const client = clientRef.current;
           const uri = state.currentGraphUri;
@@ -221,6 +291,7 @@ function App() {
           a.click();
           URL.revokeObjectURL(url);
         }}
+        onMissingObjectsBadgeClick={() => setShowMissingDrawer(true)}
       />
       {state.error && (
         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-2">
@@ -265,6 +336,7 @@ function App() {
                 projectRoot={state.currentGraphUri}
                 onNodeSelect={handleNodeSelect}
                 currentViewport={state.currentViewport}
+                onRemoveNode={handleRemoveNode}
               />
             </ErrorBoundary>
           </div>
@@ -276,6 +348,24 @@ function App() {
         </div>
       ) : null}
       <NlPane open={nlPaneOpen} onToggle={() => setNlPaneOpen((v) => !v)} />
+      {showAddPicker && clientRef.current && (
+        <AddObjectPicker
+          lspClient={clientRef.current}
+          currentImports={currentImports}
+          onSelect={handleAddObject}
+          onClose={() => setShowAddPicker(false)}
+        />
+      )}
+      {showMissingDrawer && state.currentGraph?.missingObjects && (
+        <MissingObjectsDrawer
+          missingObjects={state.currentGraph.missingObjects}
+          onRemove={async (qname) => {
+            await handleRemoveNode(qname);
+          }}
+          onClose={() => setShowMissingDrawer(false)}
+        />
+      )}
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 }

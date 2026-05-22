@@ -18,6 +18,7 @@ export interface GetGraphResponse {
   edges: ModelGraphEdge[];
   layout: GraphLayoutOutput;
   missingObjects: string[];
+  imports: string[];
 }
 
 export interface GraphLayoutOutput {
@@ -114,7 +115,7 @@ export function getGraph(
   if (content === undefined) return null;
   const result = parseString(content, uri);
   const graph = result.ast?.graph;
-  if (!graph) return null;
+  if (!result.ast || !graph) return null;
 
   const schema = graph.schema ?? 'er';
   const objectSet = new Set(graph.objects);
@@ -150,5 +151,7 @@ export function getGraph(
     edges: graph.layout?.edges ?? {},
   };
 
-  return { schema, nodes, edges, layout, missingObjects };
+  const imports = result.ast.imports.map((imp) => imp.target);
+
+  return { schema, nodes, edges, layout, missingObjects, imports };
 }

@@ -494,7 +494,7 @@ export function createServerConnection(
     return projectSymbols.all()
       .filter((s) => !allowed || allowed.has(s.kind))
       .slice(0, limit)
-      .map((s) => ({ qname: s.qname, kind: s.kind, name: s.name }));
+      .map((s) => ({ qname: s.qname, kind: s.kind, name: s.name, packageName: s.packageName ?? null }));
   });
 
   connection.onDefinition((params) => {

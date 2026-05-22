@@ -37,9 +37,17 @@ interface CanvasProps {
   projectRoot: string | null;
   onNodeSelect: (qname: string | null) => void;
   currentViewport: ViewportState | null;
+  onRemoveNode: (qname: string) => void;
 }
 
-export function Canvas({ graph, displayMode, activeSchema, viewports, nodePositions, lspClient, projectRoot, onNodeSelect, currentViewport }: CanvasProps) {
+interface ContextMenuState {
+  visible: boolean;
+  x: number;
+  y: number;
+  qname: string;
+}
+
+export function Canvas({ graph, displayMode, activeSchema, viewports, nodePositions, lspClient, projectRoot, onNodeSelect, currentViewport, onRemoveNode }: CanvasProps) {
   void activeSchema;
   void viewports;
   const containerRef = useRef<HTMLDivElement>(null);
@@ -54,9 +62,12 @@ export function Canvas({ graph, displayMode, activeSchema, viewports, nodePositi
   const currentViewportRef = useRef<ViewportState | null>(null);
   const cyInitRef = useRef(false);
   const rafRef = useRef<number | null>(null);
-  const [cyReady, setCyReady] = useState(false);
+const [cyReady, setCyReady] = useState(false);
+  const [contextMenu, setContextMenu] = useState<ContextMenuState>({ visible: false, x: 0, y: 0, qname: '' });
+  const onRemoveNodeRef = useRef(onRemoveNode);
 
   useEffect(() => { onNodeSelectRef.current = onNodeSelect; }, [onNodeSelect]);
+  useEffect(() => { onRemoveNodeRef.current = onRemoveNode; }, [onRemoveNode]);
   useEffect(() => { displayModeRef.current = displayMode; }, [displayMode]);
   useEffect(() => { graphRef.current = graph; }, [graph]);
   useEffect(() => { lspClientRef.current = lspClient; }, [lspClient]);
@@ -155,6 +166,14 @@ export function Canvas({ graph, displayMode, activeSchema, viewports, nodePositi
       cy.on('tap', (evt: CytoscapeInstance) => {
         if (evt.target === cy) onNodeSelectRef.current(null);
       });
+      cy.on('cxttap', 'node', (evt: CytoscapeInstance) => {
+        const data = evt.target.data();
+        const pos = evt.renderedPosition();
+        setContextMenu({ visible: true, x: pos.x, y: pos.y, qname: data['qname'] as string });
+      });
+      cy.on('tap', () => {
+        setContextMenu((prev) => prev.visible ? { ...prev, visible: false } : prev);
+      });
 
       cyRef.current = cy;
       setCyReady(true);
@@ -168,6 +187,27 @@ export function Canvas({ graph, displayMode, activeSchema, viewports, nodePositi
       cyInitRef.current = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!contextMenu.visible) return;
+    const handlePointerDown = (e: PointerEvent) => {
+      const menu = document.querySelector('[data-context-menu]');
+      if (menu && !menu.contains(e.target as Node)) {
+        setContextMenu((prev) => prev.visible ? { ...prev, visible: false } : prev);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setContextMenu((prev) => prev.visible ? { ...prev, visible: false } : prev);
+      }
+    };
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [contextMenu.visible]);
 
   useEffect(() => {
     if (!cyRef.current) return;
@@ -302,6 +342,23 @@ export function Canvas({ graph, displayMode, activeSchema, viewports, nodePositi
         ref={overlayRef}
         style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}
       />
+      {contextMenu.visible && (
+        <div
+          data-context-menu
+          className="absolute bg-white border border-slate-300 rounded-lg shadow-lg py-1 z-50"
+          style={{ left: contextMenu.x, top: contextMenu.y, minWidth: '160px' }}
+        >
+          <button
+            onClick={() => {
+              onRemoveNodeRef.current(contextMenu.qname);
+              setContextMenu((prev) => ({ ...prev, visible: false }));
+            }}
+            className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+          >
+            Remove from graph
+          </button>
+        </div>
+      )}
     </div>
   );
 }

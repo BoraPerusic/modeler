@@ -9,6 +9,7 @@ const mockGraph = (overrides: Partial<GetGraphResponse> = {}): GetGraphResponse 
   edges: [],
   layout: { viewport: { zoom: 1, panX: 0, panY: 0, displayMode: 'just-names' }, nodes: {}, edges: {} } as GraphLayoutOutput,
   missingObjects: [],
+  imports: [],
   ...overrides,
 });
 
