@@ -143,7 +143,7 @@ export interface ViewportState {
 
 export interface LayoutFile {
   version: 1;
-  viewports: Record<RenderableSchemaCode, ViewportState>;
+  viewport?: ViewportState;
   nodes: Record<string, { x: number; y: number }>;
   edges: Record<string, { bendPoints: Array<[number, number]> }>;
 }
@@ -151,10 +151,6 @@ export interface LayoutFile {
 export function emptyLayout(): LayoutFile {
   return {
     version: 1,
-    viewports: {
-      db: { zoom: 1.0, panX: 0, panY: 0, displayMode: 'with-types' },
-      er: { zoom: 1.0, panX: 0, panY: 0, displayMode: 'just-names' },
-    },
     nodes: {},
     edges: {},
   };
@@ -165,19 +161,11 @@ const layoutSchema = {
   $id: 'https://tatrman.org/schemas/layout/1.json',
   title: 'Tatrman Modeler layout sidecar',
   type: 'object',
-  required: ['version', 'viewports', 'nodes', 'edges'],
+  required: ['version', 'nodes', 'edges'],
   additionalProperties: false,
   properties: {
     version: { const: 1 },
-    viewports: {
-      type: 'object',
-      required: ['db', 'er'],
-      additionalProperties: false,
-      properties: {
-        db: { $ref: '#/$defs/viewport' },
-        er: { $ref: '#/$defs/viewport' },
-      },
-    },
+    viewport: { $ref: '#/$defs/viewport' },
     nodes: {
       type: 'object',
       patternProperties: {

@@ -28,10 +28,7 @@ describe('validateLayout / emptyLayout', () => {
   it('5.2e round-trip with non-empty nodes and edges', () => {
     const layout: LayoutFile = {
       version: 1,
-      viewports: {
-        db: { zoom: 1.5, panX: 100, panY: 200, displayMode: 'with-types' },
-        er: { zoom: 1.0, panX: 0, panY: 0, displayMode: 'just-names' },
-      },
+      viewport: { zoom: 1.5, panX: 100, panY: 200, displayMode: 'with-types' },
       nodes: { 'er.entity.artikl': { x: 42, y: 99 } },
       edges: { 'er.rel.foo': { bendPoints: [[10, 20], [30, 40]] as Array<[number, number]> } },
     };

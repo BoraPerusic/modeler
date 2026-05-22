@@ -275,7 +275,7 @@ export interface SetLayoutParams {
   };
 }
 
-function serializeLayoutBlock(layout: SetLayoutParams['layout']): string {
+export function serializeLayoutBlock(layout: SetLayoutParams['layout']): string {
   const parts: string[] = ['layout: {'];
 
   if (layout.viewport) {

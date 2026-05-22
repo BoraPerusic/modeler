@@ -69,14 +69,13 @@ describe('Phase 3 custom LSP methods', () => {
     const emptyRoot = join(tmpdir(), `modeler-test-empty-${Date.now()}`);
     const result = await client.sendRequest('modeler/getLayout', { projectRoot: emptyRoot }) as {
       version: number;
-      viewports: unknown;
       nodes: unknown;
       edges: unknown;
     };
     expect(result.version).toBe(1);
-    expect(result.viewports).toHaveProperty('db');
-    expect(result.viewports).toHaveProperty('er');
-});
+    expect(result).toHaveProperty('nodes');
+    expect(result).toHaveProperty('edges');
+  });
 
   it('4.2 setLayout via graphUri then getLayout round-trips the same LayoutFile', async () => {
     const graphPath = join(tmpdir(), `modeler-test-layout-${Date.now()}.ttrg`);
@@ -92,9 +91,7 @@ describe('Phase 3 custom LSP methods', () => {
     try {
       const layoutPayload = {
         version: 1 as const,
-        viewports: {
-          er: { zoom: 2.0, panX: 0, panY: 0, displayMode: 'just-names' as const },
-        },
+        viewport: { zoom: 2.0, panX: 0, panY: 0, displayMode: 'just-names' as const },
         nodes: { 'er.entity.artikl': { x: 100, y: 200 } },
         edges: {} as Record<string, { bendPoints: [number, number][] }>,
       };
@@ -122,7 +119,7 @@ describe('Phase 3 custom LSP methods', () => {
 
       const getResult = await client.sendRequest('modeler/getLayout', { graphUri: uri }) as typeof layoutPayload;
       expect(getResult.version).toBe(1);
-      expect(getResult.viewports).toHaveProperty('er');
+      expect(getResult.viewport?.zoom).toBe(2.0);
       expect(getResult.nodes['er.entity.artikl']).toEqual({ x: 100, y: 200 });
     } finally {
       rmSync(graphPath, { recursive: true, force: true });

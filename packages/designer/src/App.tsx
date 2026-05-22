@@ -14,8 +14,7 @@ import { initialDesignerState } from './state/designer-state';
 import { loadProjectViaFileSystemAccessAPI, type ProjectFiles } from './fs/file-system';
 import { loadDemoFiles } from './fs/demo-loader';
 import { getGraphResponseToModelGraph } from './cy/adapter';
-import type { LayoutFile, DisplayMode } from '@modeler/lsp';
-import { useLayoutSync } from './hooks/useLayoutSync';
+import type { DisplayMode } from '@modeler/lsp';
 import { AddObjectPicker } from './AddObjectPicker';
 import { MissingObjectsDrawer } from './MissingObjectsDrawer';
 import { ToastContainer, makeToast, type ToastMessage } from './Toast';
@@ -117,23 +116,6 @@ function App() {
       dispatch({ type: 'setError', message: `Failed to load demo: ${err}` });
     });
   }, [clientReady]);
-
-  useLayoutSync(state, dispatch, clientRef.current);
-
-  const prevViewportRef = useRef(state.currentViewport);
-  useEffect(() => {
-    const prev = prevViewportRef.current;
-    prevViewportRef.current = state.currentViewport;
-    if (!state.currentGraphUri || !clientRef.current) return;
-    if (prev?.displayMode === state.currentViewport?.displayMode && prev?.zoom === state.currentViewport?.zoom) return;
-    const layout: LayoutFile = {
-      version: 1,
-      viewports: { db: { zoom: 1, panX: 0, panY: 0, displayMode: 'just-names' }, er: { zoom: 1, panX: 0, panY: 0, displayMode: 'just-names' } },
-      nodes: state.nodePositions,
-      edges: {},
-    };
-    clientRef.current.setLayout(state.currentGraphUri, layout).catch(() => {});
-  }, [state.currentViewport, state.currentGraphUri, state.nodePositions]);
 
   const handleFileLoad = async (files: ProjectFiles) => {
     const client = clientRef.current;

@@ -184,6 +184,31 @@ importers:
         specifier: ^3.0.0
         version: 3.2.4(@types/node@22.19.19)(jiti@1.21.7)(jsdom@29.1.1)(tsx@4.22.0)
 
+  packages/migrate:
+    dependencies:
+      '@modeler/edit':
+        specifier: workspace:*
+        version: link:../edit
+      '@modeler/parser':
+        specifier: workspace:*
+        version: link:../parser
+      '@modeler/semantics':
+        specifier: workspace:*
+        version: link:../semantics
+      commander:
+        specifier: ^13.0.0
+        version: 13.1.0
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.19
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.0
+        version: 3.2.4(@types/node@22.19.19)(jiti@1.21.7)(jsdom@29.1.1)(tsx@4.22.0)
+
   packages/parser:
     dependencies:
       antlr4ng:

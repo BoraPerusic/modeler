@@ -55,12 +55,44 @@ function buildQnameToDef(asts: Document[]): Map<string, { def: Definition; schem
   for (const ast of asts) {
     const schemaCode = ast.schemaDirective?.schemaCode ?? 'er';
     const namespace = ast.schemaDirective?.namespace ?? '';
+    const packageName = ast.packageDecl?.name ?? '';
     for (const def of ast.definitions) {
-      const qname = buildQname(schemaCode, namespace, [def.name]);
-      map.set(qname, { def, schemaCode, namespace });
+      addDefAndChildren(map, def, schemaCode, namespace, packageName);
     }
   }
   return map;
+}
+
+function addDefAndChildren(
+  map: Map<string, { def: Definition; schemaCode: string; namespace: string }>,
+  def: Definition,
+  schemaCode: string,
+  namespace: string,
+  packageName: string
+): void {
+  const segments: string[] = [];
+  if (packageName) segments.push(packageName);
+  segments.push(schemaCode);
+  if (namespace) segments.push(namespace);
+  segments.push(def.name);
+  const qname = segments.join('.');
+  map.set(qname, { def, schemaCode, namespace });
+
+  const children: Definition[] = [];
+  if (def.kind === 'entity' && def.attributes) children.push(...def.attributes);
+  if (def.kind === 'table') {
+    if (def.columns) children.push(...def.columns);
+    if (def.indices) children.push(...def.indices);
+    if (def.constraints) children.push(...def.constraints);
+  }
+  if (def.kind === 'view' && def.columns) children.push(...def.columns);
+  if (def.kind === 'procedure' && def.resultColumns) children.push(...def.resultColumns);
+
+  for (const child of children) {
+    const childSegments = [...segments, child.name];
+    const childQname = childSegments.join('.');
+    map.set(childQname, { def: child, schemaCode, namespace });
+  }
 }
 
 export function getPackageGraphFromCache(pkgGraph: PackageGraph): PackageGraphResponse {

@@ -399,7 +399,6 @@ export function createServerConnection(
         const result = parseString(content, _params.graphUri);
         if (result.ast?.graph?.layout) {
           const layout = result.ast.graph.layout;
-          const schema = result.ast.graph.schema ?? 'er';
           const viewport = layout.viewport ? {
             zoom: layout.viewport.zoom,
             panX: layout.viewport.panX,
@@ -408,7 +407,7 @@ export function createServerConnection(
           } : undefined;
           return {
             version: 1,
-            viewports: { [schema]: viewport ?? { zoom: 1.0, panX: 0, panY: 0, displayMode: 'just-names' } },
+            viewport,
             nodes: layout.nodes ?? {},
             edges: (layout.edges ?? {}) as Record<string, { bendPoints: [number, number][] }>,
           } as LayoutFile;
@@ -426,10 +425,7 @@ export function createServerConnection(
     if (_params.graphUri) {
       const content = documents.get(_params.graphUri)?.getText();
       if (!content) return { documentChanges: [] };
-      const vp = _params.layout.viewports;
-      const schemaKey = vp && 'er' in vp ? 'er' : vp && 'db' in vp ? 'db' : null;
-      const viewport = schemaKey ? vp[schemaKey] : undefined;
-      return buildSetLayoutEdit(content, _params.graphUri, { nodes: _params.layout.nodes, edges: _params.layout.edges, viewport });
+      return buildSetLayoutEdit(content, _params.graphUri, { nodes: _params.layout.nodes, edges: _params.layout.edges, viewport: _params.layout.viewport });
     }
     if (opts.layoutStore && _params.projectRoot) {
       opts.layoutStore.set(_params.projectRoot, _params.layout);

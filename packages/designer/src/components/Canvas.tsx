@@ -68,7 +68,18 @@ const [cyReady, setCyReady] = useState(false);
 
   useEffect(() => { onNodeSelectRef.current = onNodeSelect; }, [onNodeSelect]);
   useEffect(() => { onRemoveNodeRef.current = onRemoveNode; }, [onRemoveNode]);
-  useEffect(() => { displayModeRef.current = displayMode; }, [displayMode]);
+  useEffect(() => {
+    displayModeRef.current = displayMode;
+    const client = lspClientRef.current;
+    const graphUri = projectRootRef.current;
+    const cy = cyRef.current;
+    if (!client || !graphUri || !cy) return;
+    // Persist the just-selected display mode. buildLayout composes the live
+    // pan/zoom with this displayMode, so we must NOT use currentViewportRef
+    // here (it lags by one render and would write the previous mode).
+    const { nodes, viewport } = buildLayout(cy, currentViewportRef.current, displayMode);
+    client.setLayout(graphUri, { version: 1 as const, viewport, nodes, edges: {} }).catch((_err: unknown) => {});
+  }, [displayMode]);
   useEffect(() => { graphRef.current = graph; }, [graph]);
   useEffect(() => { lspClientRef.current = lspClient; }, [lspClient]);
   useEffect(() => { projectRootRef.current = projectRoot; }, [projectRoot]);
@@ -150,7 +161,7 @@ const [cyReady, setCyReady] = useState(false);
         const cy = cyRef.current;
         if (!client || !graphUri || !cy) return;
         const { nodes, viewport } = buildLayout(cy, currentViewportRef.current, displayModeRef.current);
-        client.setLayout(graphUri, { version: 1, viewports: { db: currentViewportRef.current ?? viewport, er: currentViewportRef.current ?? viewport }, nodes, edges: {} }).catch((_err: unknown) => {
+        client.setLayout(graphUri, { version: 1 as const, viewport, nodes, edges: {} }).catch((_err: unknown) => {
         });
       }
 
