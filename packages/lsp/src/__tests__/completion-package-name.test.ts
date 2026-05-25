@@ -230,6 +230,58 @@ describe('completion-package-name', () => {
     expect(fooItem!.detail).toMatch(/symbol/);
   });
 
+  it('import does not list the empty root package as a blank-label item', async () => {
+    await clientConnection.sendRequest('initialize', {
+      processId: null,
+      rootUri: 'file:///',
+      capabilities: {},
+    });
+    clientConnection.sendNotification('initialized', {});
+
+    // A package-less root file (lives in the default package '').
+    clientConnection.sendNotification('textDocument/didOpen', {
+      textDocument: {
+        uri: 'file:///root.ttr',
+        languageId: 'ttr',
+        version: 1,
+        text: `def entity loose {}`,
+      },
+    });
+    // A real package, so there's at least one valid suggestion too.
+    clientConnection.sendNotification('textDocument/didOpen', {
+      textDocument: {
+        uri: 'file:///com/foo/test.ttr',
+        languageId: 'ttr',
+        version: 1,
+        text: `package com.foo\n\ndef entity foo {}`,
+      },
+    });
+
+    await sleep(50);
+
+    clientConnection.sendNotification('textDocument/didOpen', {
+      textDocument: {
+        uri: 'file:///importer.ttr',
+        languageId: 'ttr',
+        version: 1,
+        text: `import <CURSOR>`,
+      },
+    });
+
+    await sleep(50);
+
+    const result = await clientConnection.sendRequest('textDocument/completion', {
+      textDocument: { uri: 'file:///importer.ttr' },
+      position: { line: 0, character: 7 },
+      context: { triggerKind: 1 },
+    }) as { isIncomplete: boolean; items: unknown[] };
+
+    const labels = (result.items as Array<{ label: string }>).map((i) => i.label);
+    expect(labels).not.toContain('');
+    expect(labels.every((l) => l.length > 0)).toBe(true);
+    expect(labels).toContain('com.foo');
+  });
+
   it('does not return package suggestions outside package/import context', async () => {
     await clientConnection.sendRequest('initialize', {
       processId: null,

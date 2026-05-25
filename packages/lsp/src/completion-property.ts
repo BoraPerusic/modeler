@@ -295,7 +295,9 @@ export function getPackageNameCompletions(
     const prefix = prefixMatch ? prefixMatch[2] : '';
 
     items = packages
-      .filter((pkg) => !prefix || pkg.startsWith(prefix))
+      // Drop the empty root package (package-less files) — it would render as a
+      // blank-label item; you can't `import` the default package anyway.
+      .filter((pkg) => pkg.length > 0 && (!prefix || pkg.startsWith(prefix)))
       .map((pkg) => {
         const count = opts.projectSymbols.getByPackage(pkg).length;
         return {
@@ -330,9 +332,10 @@ export function detectCompletionContext(
   }
 
   // H2.6 specifies reference → property → schema/def-kind → package-name.
-  // In practice all six contexts are mutually exclusive so the order has no
-  // functional effect. Checking line-prefix patterns (schema/def/package) first
-  // is a cheap fast-path — they resolve immediately without tree iteration.
+  // In practice the five contexts (reference, property, schemaCode, defKind,
+  // packageName) are mutually exclusive so the order has no functional effect.
+  // Checking line-prefix patterns (schema/def/package) first is a cheap
+  // fast-path — they resolve immediately without tree iteration.
   const refCtx = detectReferenceProperty(doc, position);
   if (refCtx) return 'reference';
 

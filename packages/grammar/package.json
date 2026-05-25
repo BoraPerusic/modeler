@@ -14,13 +14,14 @@
     "./generated/property-map": "./src/generated/property-map.ts"
   },
   "scripts": {
-    "prebuild": "node scripts/extract-property-map.js",
+    "prebuild": "tsx scripts/extract-property-map.ts",
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
     "typescript": "^5.7.0"
   },
   "dependencies": {
