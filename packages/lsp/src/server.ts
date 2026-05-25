@@ -12,6 +12,7 @@ import {
   SymbolKind,
   Hover,
   SemanticTokensBuilder,
+  ConfigurationItem,
 } from 'vscode-languageserver';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import fuzzysort from 'fuzzysort';
@@ -41,6 +42,14 @@ import {
 import { buildProjectModelGraph, emptyLayout, buildSymbolDetail, type LayoutFile, type RenderableSchemaCode } from './model-graph.js';
 import { listGraphs, getGraph, getPackageGraphFromCache } from './graph-methods.js';
 import { buildAddObjectEdit, buildRemoveObjectEdit, buildCreateGraphEdit, buildSetLayoutEdit, type WorkspaceEdit } from '@modeler/edit';
+import { getReferenceCompletions, extractQueryPrefix } from './completion-reference.js';
+import {
+  getPropertyNameCompletions,
+  getSchemaCodeCompletions,
+  getDefKindCompletions,
+  getPackageNameCompletions,
+  detectCompletionContext,
+} from './completion-property.js';
 
 export interface ServerOptions {
   /**
@@ -64,6 +73,13 @@ export interface ServerOptions {
    * to the current LayoutFile.
    */
   layoutStore?: Map<string, LayoutFile>;
+
+  /**
+   * Whether auto-import is enabled for reference completion suggestions.
+   * When true (default), selecting an unimported symbol inserts the
+   * appropriate `import` line. Set to false to disable.
+   */
+  completionAutoImport?: boolean;
 }
 
 type FoundNode =
@@ -310,6 +326,10 @@ export function createServerConnection(
         referencesProvider: true,
         hoverProvider: true,
         workspaceSymbolProvider: true,
+        completionProvider: {
+          triggerCharacters: ['.'],
+          resolveProvider: true,
+        },
         semanticTokensProvider: {
           legend: {
             tokenTypes: [
@@ -343,6 +363,26 @@ export function createServerConnection(
       manifest
     );
     return { ...project.manifest, root: project.root, ttrFileCount: project.ttrFiles.length };
+  });
+
+  // Lets hosts without a workspace folder (the browser worker uses rootUri:null)
+  // declare the project root after init. Package inference is relative to this
+  // root; without it, nested files mis-infer their package and emit spurious
+  // ttr/package-declaration-mismatch errors. Re-validates already-open docs so
+  // it is order-independent with respect to didOpen.
+  connection.onRequest('modeler/setProjectRoot', (params: { projectRoot: string }) => {
+    const root = params.projectRoot.startsWith('file://')
+      ? new URL(params.projectRoot).pathname
+      : params.projectRoot;
+    manifest = resolveManifest(undefined, root);
+    rebuildValidator(root);
+    for (const doc of documents.all()) {
+      updateSymbolTable(doc.uri, doc.getText());
+    }
+    for (const doc of documents.all()) {
+      publishDiagnostics(doc.uri, doc.getText());
+    }
+    return { projectRoot: root };
   });
 
   connection.onRequest('modeler/getModelGraph', (params: { textDocument: { uri: string }; schema: RenderableSchemaCode }) => {
@@ -707,6 +747,89 @@ export function createServerConnection(
 
     const tokens = builder.build();
     return tokens;
+  });
+
+  connection.onCompletion(async (params) => {
+    const uri = params.textDocument.uri;
+    const doc = getDocument(uri);
+    if (!doc) return { isIncomplete: false, items: [] };
+
+    const content = doc.getText();
+    const result = parseString(content, uri);
+    if (!result.ast) return { isIncomplete: false, items: [] };
+
+    const context = detectCompletionContext({
+      position: params.position,
+      content,
+      doc: result.ast,
+    });
+
+    if (context === 'reference') {
+      const query = extractQueryPrefix(content, params.position);
+
+      let autoImport = opts.completionAutoImport ?? true;
+      try {
+        const configs = await connection.sendRequest<(boolean | string | undefined)[]>('workspace/configuration', {
+          items: [{ section: 'modeler.completion.autoImport' }] as ConfigurationItem[],
+        });
+        if (typeof configs[0] === 'boolean') {
+          autoImport = configs[0];
+        }
+      } catch {
+        // client doesn't support workspace/configuration — use default
+      }
+
+      const completions = getReferenceCompletions({
+        position: params.position,
+        content,
+        doc: result.ast,
+        projectSymbols,
+        autoImport,
+        query,
+      });
+
+      return completions ?? { isIncomplete: false, items: [] };
+    }
+
+    if (context === 'property') {
+      return getPropertyNameCompletions({
+        position: params.position,
+        content,
+        doc: result.ast,
+      }) ?? { isIncomplete: false, items: [] };
+    }
+
+    if (context === 'schemaCode') {
+      return getSchemaCodeCompletions({
+        position: params.position,
+        content,
+        doc: result.ast,
+      }) ?? { isIncomplete: false, items: [] };
+    }
+
+    if (context === 'defKind') {
+      return getDefKindCompletions({
+        position: params.position,
+        content,
+        doc: result.ast,
+      }) ?? { isIncomplete: false, items: [] };
+    }
+
+    if (context === 'packageName') {
+      const projectPackages = projectSymbols.listPackages();
+      const projectRoot = manifest.projectRoot ?? '';
+      return getPackageNameCompletions({
+        position: params.position,
+        content,
+        doc: result.ast,
+        projectPackages,
+        documentUri: uri,
+        projectRoot,
+        projectSymbols,
+      }) ?? { isIncomplete: false, items: [] };
+    }
+
+    return { isIncomplete: false, items: [] };
   });
 
   connection.onExit(() => {

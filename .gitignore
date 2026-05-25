@@ -6,3 +6,4 @@ dist/
 generated/
 /*.ttrl
 .modeler/
+packages/grammar/scripts/extract-property-map.js

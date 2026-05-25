@@ -17,6 +17,7 @@ import LspWorker from '@modeler/lsp/browser?worker';
 export interface LspClient {
   transportKind: 'node' | 'browser';
   openDocument(uri: string, content: string): Promise<void>;
+  setProjectRoot(projectRoot: string): Promise<{ projectRoot: string }>;
   listGraphs(projectRoot: string): Promise<{ graphs: GraphMetadata[] }>;
   getGraph(uri: string): Promise<GetGraphResponse | null>;
   getPackageGraph(): Promise<PackageGraphResponse>;
@@ -56,6 +57,9 @@ export async function createLspClient(): Promise<LspClient> {
       await connection.sendNotification(DidOpenTextDocumentNotification.type, {
         textDocument: { uri, languageId: 'ttr', version: 1, text: content },
       });
+    },
+    async setProjectRoot(projectRoot) {
+      return connection.sendRequest('modeler/setProjectRoot', { projectRoot }) as Promise<{ projectRoot: string }>;
     },
     async listGraphs(projectRoot) {
       return connection.sendRequest('modeler/listGraphs', { projectRoot }) as Promise<{ graphs: GraphMetadata[] }>;

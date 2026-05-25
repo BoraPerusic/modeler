@@ -53,6 +53,7 @@ vi.mock('../lsp-client.ts', () => ({
   createLspClient: vi.fn().mockResolvedValue({
     transportKind: 'browser',
     openDocument: h.openDocument,
+    setProjectRoot: vi.fn().mockResolvedValue({ projectRoot: '' }),
     listGraphs: h.listGraphs,
     getGraph: h.getGraph,
     getLayout: h.getLayout,

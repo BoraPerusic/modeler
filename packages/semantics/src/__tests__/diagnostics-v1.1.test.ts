@@ -209,6 +209,15 @@ describe('B4 diagnostics — ttr/missing-package-declaration', () => {
     expect(missing).toBeUndefined();
   });
 
+  it('does NOT emit MissingPackageDeclaration for a .ttrg graph file in a subdirectory', () => {
+    const { validator, ast } = setupValidator(
+      `graph all_er { schema: er, objects: [er.entity.artikl] }`,
+      '/test/project/graphs/all_er.ttrg'
+    );
+    const diags = validator.validatePackageDeclarations('/test/project/graphs/all_er.ttrg', ast);
+    expect(diags.find((d) => d.code === DiagnosticCode.MissingPackageDeclaration)).toBeUndefined();
+  });
+
   it('emits PackageDeclarationMismatch for a file:// URI (vs file:// scheme)', () => {
     const { validator, ast } = setupValidator(
       `package wrong.pkg

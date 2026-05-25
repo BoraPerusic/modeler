@@ -56,6 +56,7 @@ vi.mock('../lsp-client.ts', () => ({
   createLspClient: vi.fn().mockResolvedValue({
     transportKind: 'browser',
     openDocument: h.openDocument,
+    setProjectRoot: vi.fn().mockResolvedValue({ projectRoot: '' }),
     listGraphs: h.listGraphs,
     getGraph: h.getGraph,
     getLayout: h.getLayout,
@@ -203,6 +204,28 @@ describe('E4.8 — Layout persistence v1.1 (per-graph, wire-path tests)', () => 
       const payload = lastCall?.[1] as Record<string, unknown>;
       expect(payload).toHaveProperty('nodes');
       expect(payload).toHaveProperty('version');
+    });
+
+    it('applies the setLayout WorkspaceEdit, writing the dragged layout back to the .ttrg', async () => {
+      await openGraph();
+      // setLayout returns an edit that rewrites the whole .ttrg with a layout block.
+      const PATCHED = V0.replace(/\}\n$/, '  layout {\n    nodes { p.er.entity.Existing { x: 100, y: 200 } }\n  }\n}\n');
+      h.setLayout.mockReset().mockResolvedValue({
+        documentChanges: [{
+          textDocument: { uri: GRAPH_URI, version: null },
+          edits: [{ range: { start: { line: 0, character: 0 }, end: { line: 9999, character: 0 } }, newText: PATCHED }],
+        }],
+      });
+      h.openDocument.mockClear();
+
+      await waitFor(() => expect(h.cyHandlers.find((c) => c.event === 'dragfreeon')).toBeTruthy());
+      const dragfreeon = h.cyHandlers.find((c) => c.event === 'dragfreeon')!.handler;
+      act(() => { dragfreeon({ type: 'dragfreeon' }); });
+
+      await waitFor(() => expect(h.setLayout).toHaveBeenCalled());
+      // The returned edit must be applied — the .ttrg now carries the layout block.
+      await waitFor(() => expect(h.openDocument).toHaveBeenCalledWith(GRAPH_URI, PATCHED));
+      expect(h.workerStore.get(GRAPH_URI)).toBe(PATCHED);
     });
 
     it('H1 regression: display-mode toggle persists the dragged node positions (read from cy, not stale state)', async () => {

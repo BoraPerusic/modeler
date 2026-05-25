@@ -92,11 +92,12 @@ function buildEdgeForDef(
   schemaCode: string,
   namespace: string,
   knownQnames: Set<string>,
+  packageName = '',
 ): ModelGraphEdge | null {
   const defQname = buildQname(schemaCode, namespace, [def.name]);
   if (def.kind === 'fk') {
-    const fromQname = extractFkRef(def.from, schemaCode, namespace, knownQnames);
-    const toQname = extractFkRef(def.to, schemaCode, namespace, knownQnames);
+    const fromQname = extractFkRef(def.from, schemaCode, namespace, knownQnames, packageName);
+    const toQname = extractFkRef(def.to, schemaCode, namespace, knownQnames, packageName);
     if (fromQname && toQname) {
       return {
         id: defQname,
@@ -113,8 +114,8 @@ function buildEdgeForDef(
   } else if (def.kind === 'relation') {
     const fromRef = def.from?.kind === 'id' ? { path: def.from.path, parts: def.from.parts } : null;
     const toRef = def.to?.kind === 'id' ? { path: def.to.path, parts: def.to.parts } : null;
-    const fromQname = fromRef ? resolveRef(fromRef, schemaCode, namespace, knownQnames) : null;
-    const toQname = toRef ? resolveRef(toRef, schemaCode, namespace, knownQnames) : null;
+    const fromQname = fromRef ? resolveRef(fromRef, schemaCode, namespace, knownQnames, packageName) : null;
+    const toQname = toRef ? resolveRef(toRef, schemaCode, namespace, knownQnames, packageName) : null;
     if (fromQname && toQname) {
       const card = extractCardinality(def.cardinality);
       return {
@@ -424,13 +425,20 @@ export function buildSymbolDetail(
   const symbol = symbols.get(qname);
   if (!symbol) return null;
 
-  const realDef = findDefByQname(symbol.documentUri, qname, getDocument, parseDocument);
+  // Symbol-table keys are package-qualified (`<pkg>.<schema>.<ns>.<name>`), but
+  // findDefByQname and the schema/namespace parse below assume the v1 local form
+  // `<schema>.<ns>.<name>`. Strip the package prefix first, or the package
+  // segments are misread as schema/namespace and nothing resolves.
+  const pkg = symbol.packageName;
+  const localQname = pkg && qname.startsWith(`${pkg}.`) ? qname.slice(pkg.length + 1) : qname;
+
+  const realDef = findDefByQname(symbol.documentUri, localQname, getDocument, parseDocument);
   if (!realDef) return null;
 
-  const parts = qname.split('.');
+  const parts = localQname.split('.');
   const schemaCode = parts[0] ?? 'db';
   const namespace = parts.length === 2 ? '' : (parts[1] ?? '');
-  return buildSymbolDetailForDef(
+  const detail = buildSymbolDetailForDef(
     realDef,
     schemaCode,
     namespace,
@@ -438,6 +446,11 @@ export function buildSymbolDetail(
     symbol.documentUri,
     refIndex
   );
+  // Report the canonical (package-qualified) qname that was asked for, so callers
+  // can key/look up the detail by the same id used everywhere else (node ids,
+  // selectedSymbol). buildSymbolDetailForDef derives a package-less local qname.
+  if (detail) detail.qname = qname;
+  return detail;
 }
 
 // v1 limitation: only top-level defs (table / view / entity / role / fk / relation
@@ -472,22 +485,31 @@ function findDefByQname(
   return null;
 }
 
-function resolveRef(ref: { path: string; parts: string[] }, schemaCode: string, namespace: string, knownQnames: Set<string>): string | null {
-  // Fully-qualified ref like `db.dbo.TABLE.COLUMN`: drop trailing parts until a
-  // known table qname is found. Handles both `<schema>.<ns>.<table>` and the
-  // longer `<schema>.<ns>.<table>.<column>` form (FKs target columns but the
-  // edge is table-to-table).
-  if (ref.parts[0] && ['db', 'er', 'map', 'query', 'cnc'].includes(ref.parts[0])) {
-    for (let i = ref.parts.length; i >= 1; i--) {
-      const candidate = ref.parts.slice(0, i).join('.');
+function resolveRef(ref: { path: string; parts: string[] }, schemaCode: string, namespace: string, knownQnames: Set<string>, packageName = ''): string | null {
+  const parts = ref.parts;
+  // 1. Ref as written: already fully/cross-package qualified (v1.1) or v1
+  //    non-package (`er.entity.x`, `db.dbo.TABLE.COLUMN`). Drop trailing parts
+  //    until a known qname matches, so an FK column ref collapses to its table
+  //    node (FKs target columns but the edge is node-to-node).
+  for (let i = parts.length; i >= 1; i--) {
+    const candidate = parts.slice(0, i).join('.');
+    if (knownQnames.has(candidate)) return candidate;
+  }
+  // 2. Package-relative ref (e.g. `er.entity.artikl` written inside package
+  //    `billing.invoicing`): prefix the current package, again dropping trailing
+  //    parts. This is the common case in packaged projects, where the .ttrg
+  //    object set is package-qualified but same-package refs are not.
+  if (packageName) {
+    for (let i = parts.length; i >= 1; i--) {
+      const candidate = `${packageName}.${parts.slice(0, i).join('.')}`;
       if (knownQnames.has(candidate)) return candidate;
     }
   }
-  // Bare ref relative to the current schema/namespace: `TABLE` or `TABLE.COLUMN`.
-  for (let i = 1; i <= ref.parts.length; i++) {
-    const tableParts = ref.parts.slice(0, i);
-    const candidate = [schemaCode, namespace, ...tableParts].filter(s => s !== '').join('.');
-    if (knownQnames.has(candidate)) return candidate;
+  // 3. Bare ref relative to the current schema/namespace: `TABLE` or `TABLE.COLUMN`.
+  for (let i = 1; i <= parts.length; i++) {
+    const base = [schemaCode, namespace, ...parts.slice(0, i)].filter(s => s !== '').join('.');
+    if (knownQnames.has(base)) return base;
+    if (packageName && knownQnames.has(`${packageName}.${base}`)) return `${packageName}.${base}`;
   }
   return null;
 }
@@ -523,7 +545,7 @@ export function computeGraphEdges(
       segments.push(def.name);
       const defQname = segments.join('.');
       if (!objectSet.has(defQname)) continue;
-      const edge = buildEdgeForDef(def, schemaCode, namespace, objectSet);
+      const edge = buildEdgeForDef(def, schemaCode, namespace, objectSet, packageName);
       if (edge) edges.push(edge);
     }
   }
@@ -652,13 +674,13 @@ export function buildProjectModelGraph(asts: Document[], schema: RenderableSchem
 
 // FK edges are table-to-table; we pick the first column to derive the source
 // table — multi-column FKs collapse to one edge.
-function extractFkRef(pv: import('@modeler/parser').PropertyValue | undefined, schemaCode: string, namespace: string, knownQnames: Set<string>): string | null {
+function extractFkRef(pv: import('@modeler/parser').PropertyValue | undefined, schemaCode: string, namespace: string, knownQnames: Set<string>, packageName = ''): string | null {
   if (!pv) return null;
   if (pv.kind === 'id') {
-    return resolveRef({ path: pv.path, parts: pv.parts }, schemaCode, namespace, knownQnames);
+    return resolveRef({ path: pv.path, parts: pv.parts }, schemaCode, namespace, knownQnames, packageName);
   }
   if (pv.kind === 'list' && pv.items[0]?.kind === 'id') {
-    return resolveRef({ path: pv.items[0].path, parts: pv.items[0].parts }, schemaCode, namespace, knownQnames);
+    return resolveRef({ path: pv.items[0].path, parts: pv.items[0].parts }, schemaCode, namespace, knownQnames, packageName);
   }
   return null;
 }

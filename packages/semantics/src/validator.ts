@@ -413,6 +413,10 @@ validateCircularDependencies(packageGraph: PackageGraph): ValidationDiagnostic[]
 
   validatePackageDeclarations(uri: string, ast: Document): ValidationDiagnostic[] {
     const diagnostics: ValidationDiagnostic[] = [];
+    // Graph files (.ttrg) are project-level definitions that reference
+    // fully-qualified names; they are not package members and never carry a
+    // package declaration, so package-inference rules don't apply to them.
+    if (uri.endsWith('.ttrg')) return diagnostics;
     const declaredPackage = ast.packageDecl?.name ?? '';
     const { inferred, isRootFile } = inferPackageFromUri(uri, this.manifest.projectRoot);
 

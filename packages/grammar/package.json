@@ -10,9 +10,11 @@
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
     },
-    "./grammar": "./src/TTR.g4"
+    "./grammar": "./src/TTR.g4",
+    "./generated/property-map": "./src/generated/property-map.ts"
   },
   "scripts": {
+    "prebuild": "node scripts/extract-property-map.js",
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src"

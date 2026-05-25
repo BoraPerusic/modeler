@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ModelGraph, DisplayMode, Cardinality, RenderableSchemaCode, ViewportState } from '@modeler/lsp';
+import type { WorkspaceEdit } from 'vscode-languageserver-types';
 import type { LspClient } from '../lsp-client';
 import { modelGraphToCyElements } from '../cy/adapter';
 import { glyphFor } from '../cy/glyph-renderer';
@@ -38,6 +39,10 @@ interface CanvasProps {
   onNodeSelect: (qname: string | null) => void;
   currentViewport: ViewportState | null;
   onRemoveNode: (qname: string) => void;
+  // Applies the WorkspaceEdit returned by modeler/setLayout so the dragged
+  // layout is written back to the .ttrg (canonical text). Without this the
+  // layout only lives in cy and is lost on export / graph reopen.
+  onLayoutPersist?: (edit: WorkspaceEdit) => void;
 }
 
 interface ContextMenuState {
@@ -47,7 +52,7 @@ interface ContextMenuState {
   qname: string;
 }
 
-export function Canvas({ graph, displayMode, activeSchema, viewports, nodePositions, lspClient, projectRoot, onNodeSelect, currentViewport, onRemoveNode }: CanvasProps) {
+export function Canvas({ graph, displayMode, activeSchema, viewports, nodePositions, lspClient, projectRoot, onNodeSelect, currentViewport, onRemoveNode, onLayoutPersist }: CanvasProps) {
   void activeSchema;
   void viewports;
   const containerRef = useRef<HTMLDivElement>(null);
@@ -65,9 +70,11 @@ export function Canvas({ graph, displayMode, activeSchema, viewports, nodePositi
 const [cyReady, setCyReady] = useState(false);
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({ visible: false, x: 0, y: 0, qname: '' });
   const onRemoveNodeRef = useRef(onRemoveNode);
+  const onLayoutPersistRef = useRef(onLayoutPersist);
 
   useEffect(() => { onNodeSelectRef.current = onNodeSelect; }, [onNodeSelect]);
   useEffect(() => { onRemoveNodeRef.current = onRemoveNode; }, [onRemoveNode]);
+  useEffect(() => { onLayoutPersistRef.current = onLayoutPersist; }, [onLayoutPersist]);
   useEffect(() => {
     displayModeRef.current = displayMode;
     const client = lspClientRef.current;
@@ -78,7 +85,9 @@ const [cyReady, setCyReady] = useState(false);
     // pan/zoom with this displayMode, so we must NOT use currentViewportRef
     // here (it lags by one render and would write the previous mode).
     const { nodes, viewport } = buildLayout(cy, currentViewportRef.current, displayMode);
-    client.setLayout(graphUri, { version: 1 as const, viewport, nodes, edges: {} }).catch((_err: unknown) => {});
+    client.setLayout(graphUri, { version: 1 as const, viewport, nodes, edges: {} })
+      .then((edit) => { if (edit) onLayoutPersistRef.current?.(edit); })
+      .catch((_err: unknown) => {});
   }, [displayMode]);
   useEffect(() => { graphRef.current = graph; }, [graph]);
   useEffect(() => { lspClientRef.current = lspClient; }, [lspClient]);
@@ -161,8 +170,9 @@ const [cyReady, setCyReady] = useState(false);
         const cy = cyRef.current;
         if (!client || !graphUri || !cy) return;
         const { nodes, viewport } = buildLayout(cy, currentViewportRef.current, displayModeRef.current);
-        client.setLayout(graphUri, { version: 1 as const, viewport, nodes, edges: {} }).catch((_err: unknown) => {
-        });
+        client.setLayout(graphUri, { version: 1 as const, viewport, nodes, edges: {} })
+          .then((edit) => { if (edit) onLayoutPersistRef.current?.(edit); })
+          .catch((_err: unknown) => {});
       }
 
       const debouncedSaveLayout = debounce(saveLayout, 500);
@@ -187,6 +197,12 @@ const [cyReady, setCyReady] = useState(false);
       });
 
       cyRef.current = cy;
+      // Dev-only handle for the headless-browser harness (and manual debugging):
+      // lets tooling read cy.edges()/nodes() and rendered positions. Stripped
+      // from production builds.
+      if (import.meta.env.DEV) {
+        (window as unknown as { __cy?: CytoscapeInstance }).__cy = cy;
+      }
       setCyReady(true);
     });
 

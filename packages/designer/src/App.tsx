@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useReducer } from 'react';
 import { Header } from './components/Header';
 import { Canvas } from './components/Canvas';
@@ -19,6 +19,14 @@ import { AddObjectPicker } from './AddObjectPicker';
 import { MissingObjectsDrawer } from './MissingObjectsDrawer';
 import { ToastContainer, makeToast, type ToastMessage } from './Toast';
 import { applyWorkspaceEdit } from './lsp/apply-workspace-edit';
+import type { WorkspaceEdit } from 'vscode-languageserver-types';
+
+/** Files the TTR language server understands. Non-TTR files (e.g. modeler.toml)
+ *  must not be opened as `ttr` documents — they'd be parsed as TTR and emit
+ *  spurious parse errors. */
+function isModelFile(relativePath: string): boolean {
+  return relativePath.endsWith('.ttr') || relativePath.endsWith('.ttrg');
+}
 
 function LandingCard({ onLoadProject, onOpenDemo }: { onLoadProject: () => void; onOpenDemo: () => void }) {
   return (
@@ -39,7 +47,7 @@ function LandingCard({ onLoadProject, onOpenDemo }: { onLoadProject: () => void;
             onClick={onOpenDemo}
             className="px-6 py-3 bg-slate-100 text-gray-700 border border-slate-300 rounded-lg hover:bg-slate-200 font-medium transition-colors"
           >
-            Open Demo (v1-metadata)
+            Open Demo (v1.1-mini)
           </button>
         </div>
       </div>
@@ -103,15 +111,21 @@ function App() {
     const demo = params.get('demo');
     if (!demo || demoLoadingRef.current) return;
     demoLoadingRef.current = true;
-    loadDemoFiles(demo).then((files) => {
+    loadDemoFiles(demo).then(async (files) => {
       if (!clientRef.current) return;
-      return Promise.all(
-        Array.from(files.files.entries()).map(([relativePath, content]) =>
-          openDoc(`file:///${demo}/${relativePath}`, content)
-        )
-      ).then(() => {
-        dispatch({ type: 'loadProject', projectUri: `file:///${demo}` });
-      });
+      // Declare the project root before opening docs so package inference is
+      // relative to it (the browser worker has no workspace folder).
+      await clientRef.current.setProjectRoot(`file:///${demo}`);
+      await Promise.all(
+        Array.from(files.files.entries())
+          .filter(([relativePath]) => isModelFile(relativePath))
+          .map(([relativePath, content]) =>
+            openDoc(`file:///${demo}/${relativePath}`, content)
+          )
+      );
+      dispatch({ type: 'loadProject', projectUri: `file:///${demo}` });
+      const result = await clientRef.current.listGraphs(`file:///${demo}`);
+      dispatch({ type: 'storeGraphList', graphs: result.graphs });
     }).catch((err: unknown) => {
       dispatch({ type: 'setError', message: `Failed to load demo: ${err}` });
     });
@@ -120,10 +134,13 @@ function App() {
   const handleFileLoad = async (files: ProjectFiles) => {
     const client = clientRef.current;
     if (!client) return;
+    await client.setProjectRoot(`file:///${files.rootName}`);
     await Promise.all(
-      Array.from(files.files.entries()).map(([relativePath, content]) =>
-        openDoc(`file:///${files.rootName}/${relativePath}`, content)
-      )
+      Array.from(files.files.entries())
+        .filter(([relativePath]) => isModelFile(relativePath))
+        .map(([relativePath, content]) =>
+          openDoc(`file:///${files.rootName}/${relativePath}`, content)
+        )
     );
     dispatch({ type: 'loadProject', projectUri: `file:///${files.rootName}` });
     const result = await client.listGraphs(`file:///${files.rootName}`);
@@ -137,7 +154,7 @@ function App() {
 
   const handleOpenDemo = () => {
     const params = new URLSearchParams(window.location.search);
-    params.set('demo', 'v1-metadata');
+    params.set('demo', 'v1.1-mini');
     window.location.search = params.toString();
   };
 
@@ -174,6 +191,14 @@ function App() {
 
   const handleNodeSelect = (qname: string | null) => {
     dispatch({ type: 'selectSymbol', qname });
+  };
+
+  // Write a layout edit (from modeler/setLayout) back into the .ttrg text so the
+  // dragged positions / display mode survive export and graph reopen. The graph
+  // is not refetched — cy already shows these positions, and currentGraph is
+  // unchanged, so this does not trigger a Canvas rebuild.
+  const persistLayoutEdit = (edit: WorkspaceEdit) => {
+    void applyWorkspaceEdit(edit, getText, openDoc).catch(() => {});
   };
 
   const refetchGraph = async (uri: string) => {
@@ -237,6 +262,16 @@ function App() {
     });
     return () => { cancelled = true; };
   }, [state.selectedSymbol?.qname, state.symbolDetails]);
+
+  // Stable graph identity: rebuild the cy-facing ModelGraph only when the
+  // underlying graph response changes — NOT on every render. Without this, a
+  // selection click (which only changes selectedSymbol) handed Canvas a fresh
+  // graph object, re-triggering its rebuild effect and snapping dragged nodes
+  // back to their original layout positions.
+  const modelGraph = useMemo(
+    () => (state.currentGraph ? getGraphResponseToModelGraph(state.currentGraph) : null),
+    [state.currentGraph]
+  );
 
   const hasProject = state.projectUri !== null;
   const hasGraph = state.currentGraphUri !== null;
@@ -309,7 +344,7 @@ function App() {
               resetKey={state.currentGraphUri ?? 'none'}
             >
               <Canvas
-                graph={state.currentGraph ? getGraphResponseToModelGraph(state.currentGraph) : null}
+                graph={modelGraph}
                 displayMode={state.currentViewport?.displayMode ?? 'just-names'}
                 activeSchema={'er'}
                 viewports={{ er: state.currentViewport ?? { zoom: 1, panX: 0, panY: 0, displayMode: 'just-names' }, db: { zoom: 1, panX: 0, panY: 0, displayMode: 'just-names' } }}
@@ -319,6 +354,7 @@ function App() {
                 onNodeSelect={handleNodeSelect}
                 currentViewport={state.currentViewport}
                 onRemoveNode={handleRemoveNode}
+                onLayoutPersist={persistLayoutEdit}
               />
             </ErrorBoundary>
           </div>
