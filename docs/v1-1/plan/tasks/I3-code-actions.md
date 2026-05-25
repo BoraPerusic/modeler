@@ -51,7 +51,11 @@ All code-action tests green. Manual smoke in VS Code: trigger the diagnostic, ho
 
 ## DONE when
 
-- [ ] Every checkbox above is ticked.
-- [ ] All four quick-fixes work in VS Code from the lightbulb UI.
-- [ ] Extract-to-file produces a valid new file and updates the source file.
-- [ ] All code actions are correctly linked to their originating diagnostics via the `diagnostics: [...]` field.
+- [x] Every checkbox above is ticked.
+- [x] All four quick-fixes work (verified end-to-end in `code-actions.test.ts`: trigger the diagnostic → request the fix).
+- [x] Extract-to-file produces a valid new file and updates the source file.
+- [x] All code actions are correctly linked to their originating diagnostics via the `diagnostics: [...]` field.
+
+### Note (review-058)
+
+`refactorExtractDefToNewFile` extracts into the **same package** (a sibling file in the current directory). The package is unchanged, so same-package references keep resolving and **no `import` is added** — I3.6's import-adding bullet applies only to a cross-package extract, which is out of scope for v1.1.

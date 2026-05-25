@@ -111,6 +111,9 @@ importers:
 
   packages/edit:
     dependencies:
+      '@modeler/semantics':
+        specifier: workspace:*
+        version: link:../semantics
       vscode-languageserver-types:
         specifier: ^3.17.5
         version: 3.17.5

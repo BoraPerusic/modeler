@@ -50,8 +50,13 @@ All code-lens + semantic-tokens tests green. Manual smoke in VS Code: open a sam
 
 ## DONE when
 
-- [ ] Every checkbox above is ticked.
-- [ ] Code lenses appear on every def + every package declaration.
-- [ ] The four new semantic-token types are emitted correctly.
+- [x] Every checkbox above is ticked.
+- [x] Code lenses appear on every def + every package declaration. (`code-lens.test.ts`.)
+- [x] The four new semantic-token types are emitted correctly. (`semantic-tokens-v1.1.test.ts`.)
+
+### Notes (review-058)
+
+- **Counts reflect indexed (opened) documents.** "N references" and "N files in package" are computed from `refIndex` / `projectSymbols`, which this LSP populates from *opened* documents (a pre-existing trait shared by find-references and workspace symbols). In a fresh editor session they undercount until the relevant files are opened; a project-wide eager index would be a separate enhancement.
+- **`modeler.listPackageFiles`** is registered in the extension (a quick-pick over `**/*.ttr`) but is only verifiable in the Extension Host (F5); the LSP-side lens data is unit-tested.
 - [ ] I sub-phase as a whole satisfies [`implementation-plan-v1.1.md`](../implementation-plan-v1.1.md) §1.1.I acceptance.
 - [ ] v1.1 release acceptance per [`implementation-plan-v1.1.md`](../implementation-plan-v1.1.md) §"Acceptance summary" is now reachable; G's docs pass + a v1.1 marketplace publish finishes the release.

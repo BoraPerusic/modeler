@@ -103,6 +103,27 @@
           "type": "boolean",
           "default": false,
           "description": "When both a fully-qualified name and a bare name match, preselect the FQN over the bare name."
+        },
+        "modeler.format.separator": {
+          "type": "string",
+          "enum": ["newline", "comma", "preserve"],
+          "default": "preserve",
+          "description": "How a definition's properties are separated when formatting: 'newline' = one per line, 'comma' = on one line, 'preserve' = keep the original layout (break multi-line defs, inline single-line)."
+        },
+        "modeler.format.alignKeys": {
+          "type": "boolean",
+          "default": false,
+          "description": "Align property values by padding keys to the longest key in each broken property block."
+        },
+        "modeler.format.indentSpaces": {
+          "type": "number",
+          "default": 4,
+          "description": "Number of spaces per indentation level when formatting."
+        },
+        "modeler.format.width": {
+          "type": "number",
+          "default": 100,
+          "description": "Preferred maximum line width before the formatter breaks a group onto multiple lines."
         }
       }
     },

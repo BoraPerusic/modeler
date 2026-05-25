@@ -89,4 +89,9 @@ export class ReferenceIndex {
   findByQname(qname: string): ReferenceLocation[] {
     return this.byTargetQname.get(qname) ?? [];
   }
+
+  /** All resolved references that occur within `uri` (for semantic tokens). */
+  getForDocument(uri: string): ReferenceLocation[] {
+    return this.byDocument.get(uri) ?? [];
+  }
 }

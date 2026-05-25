@@ -48,7 +48,13 @@ All formatter tests green. Manual smoke in VS Code: Format Document (Shift-Alt-F
 
 ## DONE when
 
-- [ ] Every checkbox above is ticked.
-- [ ] Formatter is idempotent on every v1.1 sample.
-- [ ] All four settings work.
-- [ ] Triple-string literals and comments are preserved verbatim.
+- [x] Every checkbox above is ticked.
+- [x] Formatter is idempotent on every v1.1 sample. (`formatter-samples.test.ts`, all 25 files.)
+- [x] All four settings work. `separator: 'comma'` forces a single line regardless of width; `'preserve'` breaks iff the original def was multi-line.
+- [x] Triple-string literals are preserved verbatim (sliced from source by offset).
+- [ ] **Comments are NOT preserved — deferred.** The lexer `-> skip`s `//` and `/* */`, so the AST carries no comment data; a reprint formatter cannot restore them. Restoring comments requires `@modeler/parser` to expose a CST/trivia view (separate follow-up). Samples contain no comments, so idempotency holds.
+
+### Notes on what shipped (review-058)
+
+- **Golden fixtures**: implemented as inline assertions in `formatter.test.ts` plus the 25-file sample idempotency suite, rather than `samples/format/*.in.ttr`/`.out.ttr` file pairs.
+- **Property order is canonicalised**: the formatter emits each def's properties in a fixed order, so the *first* format of an existing file may produce a reordering diff (this is what makes formatting deterministic / idempotent).

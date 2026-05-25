@@ -12,6 +12,9 @@ import {
   SymbolKind,
   Hover,
   SemanticTokensBuilder,
+  ResponseError,
+  ErrorCodes,
+  type CodeAction,
 } from 'vscode-languageserver';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import fuzzysort from 'fuzzysort';
@@ -34,13 +37,14 @@ import {
   ReferenceIndex,
   PackageGraphBuilder,
   enclosingQnameOf,
+  inferPackageFromUri,
   type ResolvedManifest,
   type ValidationDiagnostic,
   type PackageGraph,
 } from '@modeler/semantics';
 import { buildProjectModelGraph, emptyLayout, buildSymbolDetail, type LayoutFile, type RenderableSchemaCode } from './model-graph.js';
 import { listGraphs, getGraph, getPackageGraphFromCache } from './graph-methods.js';
-import { buildAddObjectEdit, buildRemoveObjectEdit, buildCreateGraphEdit, buildSetLayoutEdit, type WorkspaceEdit } from '@modeler/edit';
+import { buildAddObjectEdit, buildRemoveObjectEdit, buildCreateGraphEdit, buildSetLayoutEdit, buildRenameSymbolEdit, buildRenamePackageEdit, type WorkspaceEdit } from '@modeler/edit';
 import { getReferenceCompletions, extractQueryPrefix } from './completion-reference.js';
 import {
   getPropertyNameCompletions,
@@ -51,6 +55,15 @@ import {
 } from './completion-property.js';
 import { buildDocumentSymbols } from './document-symbol.js';
 import { loadCompletionConfig, getCompletionConfig, invalidateCompletionConfig } from './config-completion.js';
+import { formatDocument, DEFAULT_FORMAT_CONFIG, type FormatConfig } from './formatter/format.js';
+import {
+  quickFixUnimportedReference,
+  quickFixUnusedImport,
+  quickFixMissingPackageDeclaration,
+  quickFixPackageDeclarationMismatch,
+  refactorExtractDefToNewFile,
+} from './code-actions.js';
+import { getCodeLenses } from './code-lens.js';
 
 export interface ServerOptions {
   /**
@@ -163,14 +176,26 @@ export function createServerConnection(
   }
 
   function qnameOf(def: Definition, ast: Document, enclosing?: Definition): string {
+    // Symbol-table keys are package-qualified (B2), so the package prefix must
+    // lead. For package-less files `pkg` is '' and is filtered out, leaving the
+    // v1 shape unchanged.
+    const pkg = ast.packageDecl?.name ?? '';
     const schemaCode = ast.schemaDirective?.schemaCode ?? 'db';
     const namespace = ast.schemaDirective?.namespace ?? '';
-    if (enclosing) {
-      return [schemaCode, namespace, enclosing.name, def.name]
-        .filter((s) => s !== '')
-        .join('.');
-    }
-    return [schemaCode, namespace, def.name].filter((s) => s !== '').join('.');
+    const tail = enclosing ? [enclosing.name, def.name] : [def.name];
+    return [pkg, schemaCode, namespace, ...tail].filter((s) => s !== '').join('.');
+  }
+
+  // A symbol's stored `source` is the whole `def <kind> <name> { … }` span, but
+  // rename / prepareRename need just the name token. Locate it after the
+  // `def <kind> ` prefix on the definition's first line. Falls back to the full
+  // span if the shape is unexpected.
+  function defNameSource(content: string, symbol: { name: string; source: SourceLocation }): SourceLocation {
+    const line = content.split('\n')[symbol.source.line - 1] ?? '';
+    const m = line.slice(symbol.source.column).match(/^def\s+\S+\s+/);
+    if (!m) return symbol.source;
+    const col = symbol.source.column + m[0].length;
+    return { ...symbol.source, endLine: symbol.source.line, column: col, endColumn: col + symbol.name.length };
   }
 
   function symbolKindOf(kind: string): SymbolKind {
@@ -334,6 +359,10 @@ export function createServerConnection(
           triggerCharacters: ['.'],
           resolveProvider: true,
         },
+        renameProvider: { prepareProvider: true },
+        documentFormattingProvider: true,
+        codeActionProvider: { codeActionKinds: ['quickfix', 'refactor.extract'] },
+        codeLensProvider: { resolveProvider: false },
         semanticTokensProvider: {
           legend: {
             tokenTypes: [
@@ -346,6 +375,11 @@ export function createServerConnection(
               'comment',
               'keyword',
               'variable',
+              // v1.1 additions (indices 9-12). Appended to keep existing indices stable.
+              'packageName',
+              'importedSymbol',
+              'localSymbol',
+              'unimportedReference',
             ],
             tokenModifiers: ['declaration', 'readonly', 'deprecated'],
           },
@@ -680,6 +714,125 @@ export function createServerConnection(
     } satisfies Hover;
   });
 
+  connection.onPrepareRename((params) => {
+    const uri = params.textDocument.uri;
+    const doc = getDocument(uri);
+    if (!doc) return null;
+
+    const ast = parseDocument(doc.getText(), uri);
+    if (!ast) return null;
+
+    const found = findNodeAtPosition(ast, params.position);
+    if (!found || found.kind === 'ref' && !found.ref) return null;
+
+    const schemaCode = ast.schemaDirective?.schemaCode ?? 'db';
+    const namespace = ast.schemaDirective?.namespace ?? '';
+    const packageName = ast.packageDecl?.name ?? '';
+
+    let qname: string | null = null;
+    if (found.kind === 'def') {
+      qname = qnameOf(found.def, ast, found.enclosing);
+    } else if (found.kind === 'ref') {
+      const res = resolver.resolveReference(
+        { path: found.ref.path, parts: found.ref.parts },
+        { schemaCode, namespace, enclosingQname: enclosingQnameOf(found.from, schemaCode, namespace, packageName), packageName }
+      );
+      if (res.resolved) qname = res.symbol.qname;
+    }
+
+    if (!qname) return null;
+    const symbol = projectSymbols.get(qname);
+    if (!symbol) return null;
+
+    // The editable range is the token under the cursor: the def's name span, or
+    // the reference span when renaming from a use site.
+    const range = found.kind === 'def'
+      ? sourceLocationToRange(defNameSource(getDocument(symbol.documentUri)?.getText() ?? doc.getText(), symbol))
+      : sourceLocationToRange(found.ref.source);
+    return { range, placeholder: symbol.name };
+  });
+
+  connection.onRenameRequest((params) => {
+    const uri = params.textDocument.uri;
+    const doc = getDocument(uri);
+    if (!doc) return { documentChanges: [] };
+
+    const ast = parseDocument(doc.getText(), uri);
+    if (!ast) return { documentChanges: [] };
+
+    // Package rename only when the cursor is on the `package` declaration line;
+    // otherwise fall through to symbol rename. (Previously this fired for any
+    // file that had a package declaration, so renaming an entity renamed the
+    // package instead.)
+    if (ast.packageDecl && params.position.line === ast.packageDecl.source.line - 1) {
+      const content = doc.getText();
+      const lines = content.split('\n');
+      const pkgLine = ast.packageDecl.source.line - 1;
+      const lineText = lines[pkgLine] ?? '';
+      const nameStart = lineText.indexOf(ast.packageDecl.name);
+      if (nameStart >= 0) {
+        const allDocs = new Map<string, string>();
+        for (const d of documents.all()) allDocs.set(d.uri, d.getText());
+        return buildRenamePackageEdit({
+          oldPackageName: ast.packageDecl.name,
+          newPackageName: params.newName,
+          allDocuments: allDocs,
+        });
+      }
+    }
+
+    const found = findNodeAtPosition(ast, params.position);
+    if (!found) return null;
+
+    const schemaCode = ast.schemaDirective?.schemaCode ?? 'db';
+    const namespace = ast.schemaDirective?.namespace ?? '';
+    const packageName = ast.packageDecl?.name ?? '';
+
+    let targetQname: string | null = null;
+    if (found.kind === 'def') {
+      targetQname = qnameOf(found.def, ast, found.enclosing);
+    } else if (found.kind === 'ref') {
+      const res = resolver.resolveReference(
+        { path: found.ref.path, parts: found.ref.parts },
+        { schemaCode, namespace, enclosingQname: enclosingQnameOf(found.from, schemaCode, namespace, packageName), packageName }
+      );
+      if (res.resolved) targetQname = res.symbol.qname;
+    }
+
+    if (!targetQname) return { documentChanges: [] };
+    const symbol = projectSymbols.get(targetQname);
+    if (!symbol) return { documentChanges: [] };
+
+    // Surface invalid / colliding renames as LSP errors (I1.5) so VS Code shows
+    // a refusal dialog, instead of silently producing an empty edit.
+    if (params.newName && !/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(params.newName)) {
+      throw new ResponseError(ErrorCodes.InvalidParams, `'${params.newName}' is not a valid identifier.`);
+    }
+    const newBareName = params.newName ?? symbol.name;
+    const conflictCheck = projectSymbols.findByName(newBareName).filter(e => e.qname !== targetQname && e.qname.endsWith('.' + newBareName));
+    if (conflictCheck.length > 0) {
+      throw new ResponseError(ErrorCodes.InvalidParams, `Cannot rename to '${newBareName}': a symbol with that name already exists (${conflictCheck[0].qname}).`);
+    }
+
+    const allRefs = refIndex.findByQname(targetQname);
+    const ttrgDocs = new Map<string, string>();
+    for (const d of documents.all()) {
+      ttrgDocs.set(d.uri, d.getText());
+    }
+    // Read the def's own document (it may differ from the file the rename was
+    // invoked in) and target the name span, not the whole-definition span.
+    const defContent = getDocument(symbol.documentUri)?.getText() ?? doc.getText();
+
+    return buildRenameSymbolEdit({
+      oldQname: targetQname,
+      newBareName,
+      defEntry: { ...symbol, source: defNameSource(defContent, symbol) },
+      defDocumentContent: defContent,
+      references: allRefs,
+      ttrgDocuments: ttrgDocs,
+    });
+  });
+
   connection.onWorkspaceSymbol((params) => {
     const query = params.query ?? '';
     const allSymbols = projectSymbols.all();
@@ -763,6 +916,111 @@ export function createServerConnection(
     return buildDocumentSymbols(result.ast);
   });
 
+  connection.onCodeLens((params) => {
+    const uri = params.textDocument.uri;
+    const doc = getDocument(uri);
+    if (!doc) return [];
+    const ast = parseDocument(doc.getText(), uri);
+    if (!ast) return [];
+    return getCodeLenses({ ast, refIndex, projectSymbols });
+  });
+
+  connection.onDocumentFormatting(async (params) => {
+    const uri = params.textDocument.uri;
+    const doc = getDocument(uri);
+    if (!doc) return [];
+    const content = doc.getText();
+    const result = parseString(content, uri);
+    if (!result.ast || result.errors.some((e) => e.severity === 'error')) {
+      // Don't reformat a file that doesn't parse — we'd risk dropping content.
+      return [];
+    }
+
+    const config = await loadFormatConfig();
+    const formatted = formatDocument(result.ast, content, config);
+    if (formatted === content) return [];
+
+    const lines = content.split('\n');
+    const endLine = lines.length - 1;
+    return [{
+      range: { start: { line: 0, character: 0 }, end: { line: endLine, character: lines[endLine].length } },
+      newText: formatted,
+    }];
+  });
+
+  connection.onCodeAction(async (params) => {
+    const uri = params.textDocument.uri;
+    const doc = getDocument(uri);
+    if (!doc) return [];
+    const content = doc.getText();
+    const ast = parseDocument(content, uri);
+    if (!ast) return [];
+
+    const actions: CodeAction[] = [];
+    const { inferred } = inferPackageFromUri(uri, manifest.projectRoot);
+
+    for (const diag of params.context.diagnostics) {
+      switch (diag.code) {
+        case 'ttr/unused-import':
+          actions.push(quickFixUnusedImport(uri, diag));
+          break;
+        case 'ttr/missing-package-declaration':
+          if (inferred) actions.push(quickFixMissingPackageDeclaration(uri, inferred, diag));
+          break;
+        case 'ttr/package-declaration-mismatch': {
+          const a = inferred ? quickFixPackageDeclarationMismatch(uri, content, ast, inferred, diag) : null;
+          if (a) actions.push(a);
+          break;
+        }
+        case 'ttr/unimported-reference': {
+          const found = findNodeAtPosition(ast, diag.range.start);
+          if (found && found.kind === 'ref') {
+            const schemaCode = ast.schemaDirective?.schemaCode ?? 'db';
+            const namespace = ast.schemaDirective?.namespace ?? '';
+            const packageName = ast.packageDecl?.name ?? '';
+            const res = resolver.resolveReference(
+              { path: found.ref.path, parts: found.ref.parts },
+              { schemaCode, namespace, enclosingQname: enclosingQnameOf(found.from, schemaCode, namespace, packageName), packageName },
+            );
+            if (res.resolved && res.symbol.packageName) {
+              const a = quickFixUnimportedReference(uri, content, ast, res.symbol.packageName, diag);
+              if (a) actions.push(a);
+            }
+          }
+          break;
+        }
+      }
+    }
+
+    // Refactor: extract the top-level def under the cursor into its own file.
+    const atCursor = findNodeAtPosition(ast, params.range.start);
+    if (atCursor && atCursor.kind === 'def' && !atCursor.enclosing) {
+      const a = refactorExtractDefToNewFile(uri, content, atCursor.def, ast, await loadFormatConfig());
+      if (a) actions.push(a);
+    }
+
+    return actions;
+  });
+
+  async function loadFormatConfig(): Promise<FormatConfig> {
+    if (!supportsConfiguration) return DEFAULT_FORMAT_CONFIG;
+    try {
+      const cfg = await connection.sendRequest('workspace/configuration', {
+        items: [{ section: 'modeler.format' }],
+      }) as Array<Record<string, unknown> | null>;
+      const m = cfg[0] ?? {};
+      const sep = m['separator'];
+      return {
+        separator: sep === 'newline' || sep === 'comma' || sep === 'preserve' ? sep : DEFAULT_FORMAT_CONFIG.separator,
+        alignKeys: typeof m['alignKeys'] === 'boolean' ? m['alignKeys'] : DEFAULT_FORMAT_CONFIG.alignKeys,
+        indentSpaces: typeof m['indentSpaces'] === 'number' ? m['indentSpaces'] : DEFAULT_FORMAT_CONFIG.indentSpaces,
+        width: typeof m['width'] === 'number' ? m['width'] : DEFAULT_FORMAT_CONFIG.width,
+      };
+    } catch {
+      return DEFAULT_FORMAT_CONFIG;
+    }
+  }
+
   /**
    * Emit one `class`-typed `declaration`-modified semantic token per
    * definition name. The token's start is computed by scanning the def's
@@ -777,22 +1035,55 @@ export function createServerConnection(
     const result = parseString(content, uri);
     if (!result.ast) return { data: [] };
 
+    const ast = result.ast;
     const lines = content.split('\n');
-    const builder = new SemanticTokensBuilder();
+
+    // Token type indices into the legend (see initialize). 2=class, 9=packageName,
+    // 10=importedSymbol, 11=localSymbol, 12=unimportedReference.
+    interface Tok { line: number; char: number; len: number; type: number; mod: number }
+    const toks: Tok[] = [];
 
     function emitForDef(def: Definition): void {
       const lineIndex = def.source.line - 1; // 0-based
       const lineText = lines[lineIndex] ?? '';
       const nameStart = locateName(lineText, def.name, def.source.column);
-      if (nameStart < 0) return;
-      builder.push(lineIndex, nameStart, def.name.length, 2 /* class */, 1 /* declaration */);
+      if (nameStart >= 0) toks.push({ line: lineIndex, char: nameStart, len: def.name.length, type: 2, mod: 1 });
       for (const child of nestedDefs(def)) emitForDef(child);
     }
+    for (const def of ast.definitions) emitForDef(def);
 
-    for (const def of result.ast.definitions) emitForDef(def);
+    // package declaration qname → packageName.
+    if (ast.packageDecl) {
+      const pd = ast.packageDecl;
+      toks.push({ line: pd.source.line - 1, char: pd.source.column, len: pd.name.length, type: 9, mod: 0 });
+    }
 
-    const tokens = builder.build();
-    return tokens;
+    // References → localSymbol (same package) / importedSymbol (package imported) /
+    // unimportedReference (resolved via package search, not imported).
+    const currentPkg = ast.packageDecl?.name ?? '';
+    const imports = ast.imports ?? [];
+    for (const refLoc of refIndex.getForDocument(uri)) {
+      const targetPkg = projectSymbols.get(refLoc.targetQname)?.packageName ?? '';
+      let type: number;
+      if (targetPkg === currentPkg) {
+        type = 11; // localSymbol
+      } else {
+        // Imported if a named import targets this exact symbol, or a wildcard
+        // import targets its package.
+        const imported = imports.some((imp) =>
+          (!imp.wildcard && imp.target === refLoc.targetQname) || (imp.wildcard && imp.target === targetPkg));
+        type = imported ? 10 : 12; // importedSymbol : unimportedReference
+      }
+      const s = refLoc.source;
+      const len = s.endLine === s.line ? s.endColumn - s.column : (lines[s.line - 1]?.length ?? 0) - s.column;
+      if (len > 0) toks.push({ line: s.line - 1, char: s.column, len, type, mod: 0 });
+    }
+
+    // SemanticTokensBuilder requires tokens in (line, char) order.
+    toks.sort((a, b) => a.line - b.line || a.char - b.char);
+    const builder = new SemanticTokensBuilder();
+    for (const t of toks) builder.push(t.line, t.char, t.len, t.type, t.mod);
+    return builder.build();
   });
 
   connection.onCompletion(async (params) => {
