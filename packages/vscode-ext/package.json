@@ -93,6 +93,16 @@
           ],
           "default": "off",
           "description": "Traces the communication between VS Code and the TTR language server."
+        },
+        "modeler.completion.autoImport": {
+          "type": "boolean",
+          "default": true,
+          "description": "When completing a reference to an unimported symbol, automatically insert the appropriate import statement."
+        },
+        "modeler.completion.preselectFullyQualified": {
+          "type": "boolean",
+          "default": false,
+          "description": "When both a fully-qualified name and a bare name match, preselect the FQN over the bare name."
         }
       }
     },

@@ -12,7 +12,6 @@ import {
   SymbolKind,
   Hover,
   SemanticTokensBuilder,
-  ConfigurationItem,
 } from 'vscode-languageserver';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import fuzzysort from 'fuzzysort';
@@ -50,6 +49,8 @@ import {
   getPackageNameCompletions,
   detectCompletionContext,
 } from './completion-property.js';
+import { buildDocumentSymbols } from './document-symbol.js';
+import { loadCompletionConfig, getCompletionConfig, invalidateCompletionConfig } from './config-completion.js';
 
 export interface ServerOptions {
   /**
@@ -116,6 +117,7 @@ export function createServerConnection(
   let validator = new Validator(projectSymbols, resolver, manifest);
   const refIndex = new ReferenceIndex();
   let packageGraph: PackageGraph | null = null;
+  let supportsConfiguration = false;
 
   /**
    * Locate the most-specific AST node under the cursor.
@@ -309,6 +311,7 @@ export function createServerConnection(
     const wsUri = params.workspaceFolders?.[0]?.uri
       ?? params.rootUri
       ?? (params.rootPath ? `file://${params.rootPath}` : null);
+    supportsConfiguration = !!params.capabilities?.workspace?.configuration;
     if (wsUri) {
       const projectRoot = wsUri.startsWith('file://') ? new URL(wsUri).pathname : wsUri;
       manifest = resolveManifest(undefined, projectRoot);
@@ -326,6 +329,7 @@ export function createServerConnection(
         referencesProvider: true,
         hoverProvider: true,
         workspaceSymbolProvider: true,
+        documentSymbolProvider: true,
         completionProvider: {
           triggerCharacters: ['.'],
           resolveProvider: true,
@@ -351,8 +355,18 @@ export function createServerConnection(
     };
   });
 
-  connection.onInitialized(() => {
-    // nothing yet
+  connection.onInitialized(async () => {
+    if (supportsConfiguration) {
+      await loadCompletionConfig(connection);
+    }
+  });
+
+  connection.onDidChangeConfiguration(async () => {
+    if (supportsConfiguration) {
+      await loadCompletionConfig(connection);
+    } else {
+      invalidateCompletionConfig();
+    }
   });
 
   connection.onRequest('modeler/getProjectInfo', async (params: { textDocument: { uri: string } }) => {
@@ -686,6 +700,27 @@ export function createServerConnection(
       limit: 100,
     });
 
+    const queryLower = query.toLowerCase();
+
+    // H3.4: per-package query mode. If query ends with '.', treat it as a
+    // package-prefix filter (e.g. "billing." → all symbols in billing.*).
+    // Match prefix + '.' so "billing." doesn't also match "billingsystem.*".
+    if (query.endsWith('.')) {
+      const prefix = query.slice(0, -1).toLowerCase();
+      const packageFiltered = allSymbols.filter((s) => {
+        const qnameLower = s.qname.toLowerCase();
+        return qnameLower.startsWith(prefix + '.');
+      });
+      return packageFiltered.slice(0, 100).map((symbol) => ({
+        name: symbol.qname,
+        kind: symbolKindOf(symbol.kind),
+        location: {
+          uri: symbol.documentUri,
+          range: sourceLocationToRange(symbol.source),
+        },
+      })) satisfies SymbolInformation[];
+    }
+
     // Kind-name boost: when the query is a prefix of a definition kind (e.g.
     // "rel" -> "relation"), float every symbol of that kind, drawn from the
     // *full* index, above the fuzzy matches. fuzzysort only searches qname and
@@ -694,7 +729,6 @@ export function createServerConnection(
     // `relation`-kind def (whose qname is `er.entity.<name>`, no "rel"
     // substring) is ever reached. Gated at 3+ chars so short name-fragment
     // queries aren't hijacked by an accidental kind prefix.
-    const queryLower = query.toLowerCase();
     const isKindQuery = (kind: string): boolean => {
       const k = kind.toLowerCase();
       return k === queryLower || k.startsWith(queryLower);
@@ -715,6 +749,18 @@ export function createServerConnection(
         range: sourceLocationToRange(symbol.source),
       },
     })) satisfies SymbolInformation[];
+  });
+
+  connection.onDocumentSymbol((params) => {
+    const uri = params.textDocument.uri;
+    const doc = getDocument(uri);
+    if (!doc) return [];
+
+    const content = doc.getText();
+    const result = parseString(content, uri);
+    if (!result.ast) return [];
+
+    return buildDocumentSymbols(result.ast);
   });
 
   /**
@@ -767,17 +813,8 @@ export function createServerConnection(
     if (context === 'reference') {
       const query = extractQueryPrefix(content, params.position);
 
-      let autoImport = opts.completionAutoImport ?? true;
-      try {
-        const configs = await connection.sendRequest<(boolean | string | undefined)[]>('workspace/configuration', {
-          items: [{ section: 'modeler.completion.autoImport' }] as ConfigurationItem[],
-        });
-        if (typeof configs[0] === 'boolean') {
-          autoImport = configs[0];
-        }
-      } catch {
-        // client doesn't support workspace/configuration — use default
-      }
+      const config = getCompletionConfig();
+      const autoImport = opts.completionAutoImport ?? config.autoImport;
 
       const completions = getReferenceCompletions({
         position: params.position,

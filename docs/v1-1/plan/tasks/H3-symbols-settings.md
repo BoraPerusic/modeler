@@ -56,5 +56,5 @@ All tests green. Manual smoke in VS Code: Cmd-T (workspace symbols) fuzzy-finds 
 - [ ] Every checkbox above is ticked.
 - [ ] Outline view in VS Code shows the new tree shape for every sample file.
 - [ ] Workspace symbol search returns full qnames; package-scoped queries work.
-- [ ] Both completion settings are honoured and documented.
+- [ ] `modeler.completion.autoImport` is honoured and documented. `modeler.completion.preselectFullyQualified` is documented and loaded into config but **deferred (not yet honoured)** — the v1.1 reference completion emits a single item per symbol (bare for imported, FQN for unimported, deduped by qname), so there is no FQN/bare pair to disambiguate; honouring this setting requires a dual-item completion model, deferred to a later phase (review-056 F1.5).
 - [ ] H sub-phase as a whole satisfies [`implementation-plan-v1.1.md`](../implementation-plan-v1.1.md) §1.1.H acceptance.

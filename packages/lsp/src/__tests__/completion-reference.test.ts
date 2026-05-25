@@ -236,3 +236,101 @@ def entity artikl {}`;
     expect(edit.range.start.line).toBeGreaterThan(0);
   });
 });
+
+describe('completion-config integration', () => {
+  let clientConnection: lsp.Connection;
+  let serverConnection: lsp.Connection;
+
+  function createPairedConnection(): { client: lsp.Connection; server: lsp.Connection } {
+    const clientTransport = new PassThrough({ objectMode: true });
+    const serverTransport = new PassThrough({ objectMode: true });
+
+    const clientReader = new lsp.StreamMessageReader(clientTransport as unknown as NodeJS.ReadableStream);
+    const clientWriter = new lsp.StreamMessageWriter(serverTransport as unknown as NodeJS.WritableStream);
+    const client = lsp.createConnection(clientReader, clientWriter) as lsp.Connection;
+
+    const serverReader = new lsp.StreamMessageReader(serverTransport as unknown as NodeJS.ReadableStream);
+    const serverWriter = new lsp.StreamMessageWriter(clientTransport as unknown as NodeJS.WritableStream);
+    const server = lsp.createConnection(serverReader, serverWriter) as lsp.Connection;
+
+    client.listen();
+    server.listen();
+
+    return { client, server };
+  }
+
+  afterEach(() => {
+    clientConnection?.dispose();
+    serverConnection?.dispose();
+  });
+
+  it('autoImport: false suppresses additionalTextEdits on reference completion', async () => {
+    const { client, server } = createPairedConnection();
+    clientConnection = client;
+    serverConnection = server;
+
+    let configResponse: unknown[] = [false];
+    clientConnection.onRequest('workspace/configuration', (_params: { items: Array<{ section: string }> }) => {
+      return configResponse;
+    });
+
+    createServerConnection(serverConnection, { completionAutoImport: undefined });
+
+    await clientConnection.sendRequest('initialize', {
+      processId: null,
+      rootUri: 'file:///proj',
+      capabilities: { workspace: { configuration: true } },
+    });
+    clientConnection.sendNotification('initialized', {});
+
+    clientConnection.sendNotification('textDocument/didOpen', {
+      textDocument: {
+        uri: 'file:///proj/pkg_a/test.ttr',
+        languageId: 'ttr',
+        version: 1,
+        text: `package pkg_a\n\ndef entity artikl {}`,
+      },
+    });
+    clientConnection.sendNotification('textDocument/didOpen', {
+      textDocument: {
+        uri: 'file:///proj/pkg_b/consumer.ttr',
+        languageId: 'ttr',
+        version: 1,
+        text: `package pkg_b\n\nschema er namespace entity\n\ndef relation uses_artikl {\n  from: pkg_a.er.entity.artikl\n}`,
+      },
+    });
+
+    await new Promise((r) => setTimeout(r, 100));
+
+    const result = await clientConnection.sendRequest('textDocument/completion', {
+      textDocument: { uri: 'file:///proj/pkg_b/consumer.ttr' },
+      position: { line: 4, character: 12 },
+      context: { triggerKind: 1 },
+    }) as { isIncomplete: boolean; items: unknown[] };
+
+    expect(result.items.length).toBeGreaterThan(0);
+    const artiklItem = (result.items as Array<{ label: string; additionalTextEdits?: unknown[] }>).find(
+      (i) => i.label === 'artikl'
+    );
+    expect(artiklItem).toBeDefined();
+    expect(artiklItem!.additionalTextEdits, 'autoImport: false should suppress additionalTextEdits').toBeUndefined();
+
+    configResponse = [true];
+
+    clientConnection.sendNotification('workspace/didChangeConfiguration', { settings: { 'modeler.completion': { autoImport: true } } });
+    await new Promise((r) => setTimeout(r, 100));
+
+    const result2 = await clientConnection.sendRequest('textDocument/completion', {
+      textDocument: { uri: 'file:///proj/pkg_b/consumer.ttr' },
+      position: { line: 4, character: 12 },
+      context: { triggerKind: 1 },
+    }) as { isIncomplete: boolean; items: unknown[] };
+
+    const artiklItem2 = (result2.items as Array<{ label: string; additionalTextEdits?: unknown[] }>).find(
+      (i) => i.label === 'artikl'
+    );
+    expect(artiklItem2).toBeDefined();
+    expect(artiklItem2!.additionalTextEdits, 'autoImport: true should include additionalTextEdits').toBeDefined();
+    expect(artiklItem2!.additionalTextEdits!.length).toBeGreaterThan(0);
+  });
+});
