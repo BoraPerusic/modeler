@@ -109,6 +109,7 @@ function tokenToScope(name, literal) {
         case 'DESCRIPTIONS': return 'keyword.other.property.ttr';
         case 'EXAMPLES': return 'keyword.other.property.ttr';
         case 'FUZZY': return 'keyword.other.property.ttr';
+        case 'MAPPING': return 'keyword.other.property.ttr';
         case 'FROM': return 'keyword.other.property.ttr';
         case 'TO': return 'keyword.other.property.ttr';
         case 'TEXT': return 'support.type.primitive.ttr';

@@ -1,7 +1,7 @@
 // =============================================================================
 // TTR (Tatrman) grammar
 //
-// @grammar-version: 2.0
+// @grammar-version: 2.1
 //
 // Version scheme: X.Y — X is a breaking/major change, Y is additive
 // (syntactic sugar, new optional constructs, bug fixes). Bump the marker
@@ -127,11 +127,11 @@ fkProperty               : descriptionProperty | tagsProperty | fromProperty | t
 
 procedureProperty        : descriptionProperty | tagsProperty | parametersProperty | resultColumnsProperty ;
 
-entityProperty           : descriptionProperty | tagsProperty | labelPluralProperty | nameAttributeProperty | codeAttributeProperty | aliasesProperty | attributesProperty | rolesProperty | displayLabelProperty | searchBlockProperty ;
+entityProperty           : descriptionProperty | tagsProperty | labelPluralProperty | nameAttributeProperty | codeAttributeProperty | aliasesProperty | attributesProperty | rolesProperty | displayLabelProperty | searchBlockProperty | mappingProperty ;
 
-attributeProperty        : descriptionProperty | tagsProperty | typeProperty | isKeyProperty | optionalProperty | valueLabelsProperty | displayLabelProperty | searchBlockProperty ;
+attributeProperty        : descriptionProperty | tagsProperty | typeProperty | isKeyProperty | optionalProperty | valueLabelsProperty | displayLabelProperty | searchBlockProperty | mappingProperty ;
 
-relationProperty         : descriptionProperty | tagsProperty | fromProperty | toProperty | cardinalityProperty | joinProperty | searchBlockProperty ;
+relationProperty         : descriptionProperty | tagsProperty | fromProperty | toProperty | cardinalityProperty | joinProperty | searchBlockProperty | mappingProperty ;
 
 er2dbEntityProperty      : descriptionProperty | tagsProperty | entityProperty_ | targetProperty | whereFilterProperty ;
 
@@ -184,7 +184,7 @@ entityProperty_           : ENTITY            propSep? id ;
 attributeProperty_        : ATTRIBUTE         propSep? id ;
 relationProperty_         : RELATION          propSep? id ;
 fkProperty_               : FK                propSep? id ;
-targetProperty            : TARGET            propSep? object_ ;
+targetProperty            : TARGET            propSep? ( object_ | id ) ;
 whereFilterProperty       : WHERE_FILTER      propSep? object_ ;
 languageProperty          : LANGUAGE          propSep? languageValue ;
 sourceTextProperty        : SOURCE_TEXT       propSep? stringLiteralForm ;
@@ -206,6 +206,41 @@ patternsProperty          : PATTERNS          propSep? listOfStrings ;
 descriptionsProperty      : DESCRIPTIONS      propSep? localizedStringList ;
 examplesProperty          : EXAMPLES          propSep? listOfStrings ;
 fuzzyProperty             : FUZZY             propSep? BOOLEAN_LITERAL ;
+
+// v2.1 — inline mapping (syntactic sugar for def er2db_*).
+mappingProperty       : MAPPING propSep? mappingValue ;
+
+mappingValue
+    : id
+    | mappingBlock
+    ;
+
+mappingBlock
+    : LBRACE ( mappingBlockProperty ( COMMA? mappingBlockProperty )* COMMA? )? RBRACE
+    ;
+
+mappingBlockProperty
+    : targetProperty
+    | mappingColumnsProperty
+    | fkProperty_
+    ;
+
+mappingColumnsProperty
+    : COLUMNS propSep? mappingColumnMap
+    ;
+
+mappingColumnMap
+    : LBRACE ( mappingColumnEntry ( COMMA? mappingColumnEntry )* COMMA? )? RBRACE
+    ;
+
+mappingColumnEntry
+    : id propSep? mappingColumnValue
+    ;
+
+mappingColumnValue
+    : id
+    | object_
+    ;
 
 // ----- Inline def lists -----
 
@@ -374,6 +409,7 @@ idPart
   | FROM | TO                                            // allowed as object property keys (e.g. cardinality, join pairs)
   | PACKAGE | IMPORT | GRAPH                              // v1.1 new top-level keywords
   | OBJECTS | LAYOUT                                      // v1.1 graph body keywords
+  | MAPPING                                         // v2.1
   ;
 
 // =============================================================================
@@ -389,6 +425,7 @@ IMPORT     : 'import' ;     // v1.1
 GRAPH      : 'graph' ;      // v1.1
 OBJECTS    : 'objects' ;    // v1.1 graph body
 LAYOUT     : 'layout' ;     // v1.1 graph body
+MAPPING    : 'mapping' ;    // v2.1
 
 DB    : 'db' ;
 ER    : 'er' ;

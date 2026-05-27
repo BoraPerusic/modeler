@@ -12,6 +12,20 @@ The canonical version lives in the `// @grammar-version:` marker at the top of
 `src/generated/version.ts`, re-exported from `@modeler/grammar` as
 `TTR_GRAMMAR_VERSION`.
 
+## 2.1 — 2026-05-27
+
+Additive: inline mapping shorthand for er2db_* on entity/attribute/relation.
+Backward compatible — every 2.0 file parses unchanged.
+
+- Added `mapping:` property on `def entity`, `def attribute`, and `def relation`.
+- Added `MAPPING` lexer token; extended `idPart` to keep it usable as an identifier component.
+- Added rules: `mappingProperty`, `mappingValue`, `mappingBlock`,
+  `mappingBlockProperty`, `mappingColumnsProperty`, `mappingColumnMap`,
+  `mappingColumnEntry`, `mappingColumnValue`.
+- Relaxed `targetProperty` to accept a bare id (`target: <ref>`) in addition to
+  the existing object form (`target: { column: <ref> }`).
+- Reuses existing `COLUMNS` and `FK` tokens; no new keywords beyond `mapping`.
+
 ## 2.0 — 2026-05-27
 
 Major version bump promoting the v1.1 "packages" work to a stable grammar
