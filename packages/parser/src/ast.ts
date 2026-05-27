@@ -153,6 +153,34 @@ export interface ValueLabels {
   source: SourceLocation;
 }
 
+// ----- v2.1: inline mappings -----
+
+export interface MappingPropertyBareId {
+  kind: 'bareId';
+  id: Reference;
+  source: SourceLocation;
+}
+
+export interface MappingPropertyBlock {
+  kind: 'block';
+  target?: ObjectValue | Reference;
+  columns?: MappingColumnEntry[];
+  fk?: Reference;
+  source: SourceLocation;
+}
+
+export type MappingProperty = MappingPropertyBareId | MappingPropertyBlock;
+
+export interface MappingColumnEntry {
+  name: string;
+  value: MappingColumnValue;
+  source: SourceLocation;
+}
+
+export type MappingColumnValue =
+  | { kind: 'bareId'; id: Reference; source: SourceLocation }
+  | { kind: 'object'; object: ObjectValue; source: SourceLocation };
+
 export interface ParameterDef {
   name: string;
   type?: DataType;
@@ -273,6 +301,7 @@ export interface EntityDef {
   roles?: string[];
   displayLabel?: LocalizedString;
   search?: SearchBlock;
+  mapping?: MappingProperty;
 }
 
 export interface AttributeDef {
@@ -287,6 +316,7 @@ export interface AttributeDef {
   valueLabels?: ValueLabels;
   displayLabel?: LocalizedString;
   search?: SearchBlock;
+  mapping?: MappingProperty;
 }
 
 export interface RelationDef {
@@ -300,6 +330,7 @@ export interface RelationDef {
   cardinality?: ObjectValue;
   join?: ListValue;
   search?: SearchBlock;
+  mapping?: MappingProperty;
 }
 
 export interface Er2dbEntityDef {
@@ -309,7 +340,7 @@ export interface Er2dbEntityDef {
   description?: StringValue | TripleStringValue;
   tags?: string[];
   entity?: Reference;
-  target?: ObjectValue;
+  target?: ObjectValue | Reference;
   whereFilter?: ObjectValue;
 }
 
@@ -320,7 +351,7 @@ export interface Er2dbAttributeDef {
   description?: StringValue | TripleStringValue;
   tags?: string[];
   attribute?: Reference;
-  target?: ObjectValue;
+  target?: ObjectValue | Reference;
 }
 
 export interface Er2dbRelationDef {
