@@ -139,6 +139,8 @@ All line numbers below are as of the planning snapshot — confirm by reading th
   ```
   Expect every test to error out because `synthesizeMappings` doesn't exist yet.
 
+**Status: DONE.** Tests written and passing (see commit `05b0748`).
+
 ### D.1 — Extend `SymbolEntry` with mapping source
 
 - [ ] **Add the field** to `SymbolEntry` in `packages/semantics/src/symbol-table.ts` (~line 3):
