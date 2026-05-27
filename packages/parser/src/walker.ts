@@ -1600,9 +1600,10 @@ function walkMappingColumnMap(ctx: MappingColumnMapContext, file: string): Mappi
           source: makeSourceLocation(v, file),
         };
       } else {
+        const inner = walkObject(mtv.object_()!, file);
         value = {
           kind: 'object',
-          object: walkObject(mtv.object_()!, file),
+          object: { kind: 'object', entries: [{ key: 'target', value: inner, source: makeSourceLocation(mtv, file) }], source: makeSourceLocation(v, file) },
           source: makeSourceLocation(v, file),
         };
       }

@@ -30,6 +30,18 @@ describe('inline mappings — entity level', () => {
     expect(entity.mapping.columns).toHaveLength(3);
     expect(entity.mapping.columns[0].name).toBe('id_artiklu');
     expect(entity.mapping.columns[0].value.kind).toBe('bareId');
+
+    // form (b): { target: KOD_ZBOZI } — target wrapper preserved
+    expect(entity.mapping.columns[1].name).toBe('kód_artiklu');
+    expect(entity.mapping.columns[1].value.kind).toBe('object');
+    expect(entity.mapping.columns[1].value.object.entries[0].key).toBe('target');
+    expect(entity.mapping.columns[1].value.object.entries[0].value.path).toBe('KOD_ZBOZI');
+
+    // form (c): { target: { column: NAZEV_ZBOZI } } — target wrapper preserved, inner is an object
+    expect(entity.mapping.columns[2].name).toBe('název_artiklu');
+    expect(entity.mapping.columns[2].value.kind).toBe('object');
+    expect(entity.mapping.columns[2].value.object.entries[0].key).toBe('target');
+    expect(entity.mapping.columns[2].value.object.entries[0].value.kind).toBe('object');
   });
 });
 

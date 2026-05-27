@@ -333,6 +333,26 @@ All line numbers below are as of the planning snapshot — confirm by reading th
           id: { path: parts.join('.'), parts, source: makeSourceLocation(idCtx, file) },
           source: makeSourceLocation(v, file),
         };
+      } else if (v.mappingTargetValue()) {
+        // Post review-059 B1: grammar is `id | LBRACE TARGET ... mappingTargetValue RBRACE | object_`
+        // Forms (b) and (c) arrive via mappingTargetValue(); rebuild a consistent { target: <inner> } wrapper.
+        const mtv = v.mappingTargetValue()!;
+        if (mtv.id()) {
+          const idCtx = mtv.id()!;
+          const parts = idCtx.idPart().map((pt) => pt.getText());
+          value = {
+            kind: 'object',
+            object: { kind: 'object', entries: [{ key: 'target', value: { kind: 'id', path: parts.join('.'), parts, source: makeSourceLocation(idCtx, file) }, source: makeSourceLocation(mtv, file) }], source: makeSourceLocation(mtv, file) },
+            source: makeSourceLocation(v, file),
+          };
+        } else {
+          const inner = walkObject(mtv.object_()!, file);
+          value = {
+            kind: 'object',
+            object: { kind: 'object', entries: [{ key: 'target', value: inner, source: makeSourceLocation(mtv, file) }], source: makeSourceLocation(v, file) },
+            source: makeSourceLocation(v, file),
+          };
+        }
       } else {
         value = {
           kind: 'object',
@@ -412,5 +432,5 @@ All line numbers below are as of the planning snapshot — confirm by reading th
 - **`SourceLocation` invariant.** Per CLAUDE.md, `endColumn = stopToken.column + stopTokenLength`, not `startColumn + spanLength`. `makeSourceLocation` already does this correctly — don't reach for shortcuts in the new helpers.
 - **`walkObject` already exists** — reuse it for `mappingColumnValue` / `target` object forms. Don't duplicate the property-walk logic.
 - **Attribute inline-list walker** (`walkAttributeDefList`) and the block-form `walkAttributeDef` share the same `AttributeProperty` accessor pattern. If you forget one, the entity-with-inline-attributes case fails — the C.0 test for entity full form covers this.
-- **`mappingColumnValue` ambiguity** between `id` and `object_` is unambiguous to ANTLR because `id` cannot start with `{`. Don't second-guess the grammar here.
+- **`mappingColumnValue` has three alternatives** (post review-059 B1 grammar change): `id | LBRACE TARGET propSep? mappingTargetValue RBRACE | object_`. Forms (b) and (c) arrive via `v.mappingTargetValue()` (not `v.object_()`). The walker rebuilds a `{ target: <inner> }` ObjectValue for both so form (b) and form (c) have an identical top-level `target` shape at the AST level (review-060 C1). The `object_` fallback is for future extensions.
 - The Designer's "find references" path goes through `references.ts` in semantics. It walks `Reference` nodes inside the AST. Section D's synthesizer will produce additional `Reference` instances for inline-mapping targets; they'll be picked up automatically. C just makes the AST shape available.
