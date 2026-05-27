@@ -1,5 +1,3 @@
-import { fileURLToPath } from 'url';
-
-// Prefer `@modeler/grammar/grammar` (declared in package exports) over this constant.
-export const grammarFile = fileURLToPath(new URL('../src/TTR.g4', import.meta.url));
-export const grammarDir = fileURLToPath(new URL('../src', import.meta.url));
+export { PROPERTY_MAP, SEARCH_SUB_PROPERTIES } from '../src/generated/property-map.js';
+export type { DefinitionKind, PropertyInfo } from '../src/generated/property-map.js';
+export { TTR_GRAMMAR_VERSION } from '../src/generated/version.js';

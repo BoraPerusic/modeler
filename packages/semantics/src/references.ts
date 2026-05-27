@@ -1,6 +1,7 @@
 import type {
   Definition,
   Document,
+  ImportDecl,
   PropertyValue,
   Reference,
 } from '@modeler/parser';
@@ -62,6 +63,14 @@ function pushIdValueAsReference(
   if (!value) return;
   if (value.kind === 'id') {
     out.push({ path: value.path, parts: value.parts, source: value.source });
+  } else if (value.kind === 'list') {
+    for (const item of value.items) {
+      pushIdValueAsReference(item, out);
+    }
+  } else if (value.kind === 'object') {
+    for (const entry of value.entries) {
+      pushIdValueAsReference(entry.value, out);
+    }
   }
 }
 
@@ -114,4 +123,10 @@ export function nestedDefs(def: Definition): Definition[] {
       break;
   }
   return out;
+}
+
+export function packageOfImport(imp: ImportDecl): string {
+  if (imp.wildcard) return imp.target;
+  const parts = imp.target.split('.');
+  return parts.length >= 2 ? parts.slice(0, -1).join('.') : '';
 }

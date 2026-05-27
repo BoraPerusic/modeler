@@ -10,6 +10,7 @@ export interface ProjectManifest {
 
 export interface ResolvedManifest {
   name: string;
+  projectRoot: string;
   preferredLanguage: string;
   declaredSchemas: string[];
   namespaces: Record<string, string>;
@@ -46,6 +47,7 @@ function basename(p: string): string {
 export function resolveManifest(m: ProjectManifest | undefined, projectRoot: string): ResolvedManifest {
   return {
     name: m?.project?.name ?? (basename(projectRoot) || 'unnamed'),
+    projectRoot,
     preferredLanguage: m?.language?.preferred ?? 'en',
     declaredSchemas: m?.schemas?.declared ?? ['db', 'er', 'map', 'query', 'cnc'],
     namespaces: m?.schemas?.namespaces ?? {},

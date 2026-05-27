@@ -20,14 +20,42 @@ export function activate(context: vscode.ExtensionContext) {
   };
 
   const client = new LanguageClient('ttr', 'TTR Language Server', serverOptions, {
-    documentSelector: [{ scheme: 'file', language: 'ttr' }],
+    documentSelector: [
+      { scheme: 'file', language: 'ttr' },
+      { scheme: 'file', language: 'ttrg' },
+    ],
     outputChannelName: 'TTR Language Server',
   });
 
   context.subscriptions.push(
     vscode.commands.registerCommand('modeler.openInDesigner', () => {
       vscode.window.showInformationMessage('Designer integration will be wired in Phase 3.');
-    })
+    }),
+    // Invoked by the "N references" code lens.
+    vscode.commands.registerCommand('modeler.showReferences', (qname?: string) => {
+      vscode.window.showInformationMessage(
+        `Use "Find All References" (Shift+F12) on ${qname ?? 'the symbol'} to list its references.`,
+      );
+    }),
+    // Invoked by the "N files in package" code lens.
+    vscode.commands.registerCommand('modeler.listPackageFiles', async (pkg?: string) => {
+      if (!pkg) return;
+      const uris = await vscode.workspace.findFiles('**/*.ttr');
+      const inPkg: string[] = [];
+      for (const uri of uris) {
+        const text = (await vscode.workspace.openTextDocument(uri)).getText();
+        if (new RegExp(`(^|\\n)package\\s+${pkg.replace(/[.]/g, '\\.')}(\\s|$)`).test(text)) {
+          inPkg.push(vscode.workspace.asRelativePath(uri));
+        }
+      }
+      const pick = await vscode.window.showQuickPick(inPkg.length ? inPkg : ['(no files found)'], {
+        title: `Files in package ${pkg}`,
+      });
+      if (pick && inPkg.includes(pick)) {
+        const match = uris.find((u) => vscode.workspace.asRelativePath(u) === pick);
+        if (match) void vscode.window.showTextDocument(match);
+      }
+    }),
   );
 
   client.start();

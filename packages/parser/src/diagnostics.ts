@@ -8,6 +8,22 @@ export enum DiagnosticCode {
   InvalidType = 'ttr/invalid-type',
   EntityAttributeNotFound = 'ttr/entity-attribute-not-found',
   PrimaryKeyColumnNotFound = 'ttr/primary-key-column-not-found',
+  WrongFileKind = 'ttr/wrong-file-kind',
+  UnimportedReference = 'ttr/unimported-reference',
+  UnusedImport = 'ttr/unused-import',
+  WildcardWithNoMatches = 'ttr/wildcard-with-no-matches',
+  DuplicateImport = 'ttr/duplicate-import',
+  CircularPackageDependency = 'ttr/circular-package-dependency',
+  PackageDeclarationMismatch = 'ttr/package-declaration-mismatch',
+  MissingPackageDeclaration = 'ttr/missing-package-declaration',
+  AmbiguousReference = 'ttr/ambiguous-reference',
+  GraphObjectNotFound = 'ttr/graph-object-not-found',
+  GraphLayoutStaleNode = 'ttr/graph-layout-stale-node',
+  GraphObjectsEmpty = 'ttr/graph-objects-empty',
+  GraphNameMismatch = 'ttr/graph-name-mismatch',
+  FileOrdering = 'ttr/file-ordering',
+  FuzzyWithoutSearchable = 'ttr/fuzzy-without-searchable',
+  DuplicateSearchProperty = 'ttr/duplicate-search-property',
 }
 
 export enum DiagnosticSeverity {

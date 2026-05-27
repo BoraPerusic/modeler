@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Tatrman Modeler — editor-side tooling for the TTR modeling language. Delivers a VS Code plugin, a static React graphical designer, and (later) an IntelliJ plugin, all sharing one TypeScript LSP server. TTR itself is consumed at runtime by `ai-platform` (separate repo); this repo is editor tooling only and never talks to that service.
 
-Authoritative design and decisions live in `docs/design/architecture.md` — read it before making non-trivial architectural changes. The phased plan is in `docs/plan/implementation-plan.md`.
+Authoritative design and decisions for v1 live in `docs/v1/design/architecture.md` — read it before making non-trivial architectural changes. The v1 phased plan is in `docs/v1/plan/implementation-plan.md`. The v1.1 design (packages, imports, `.ttrg`) lives under `docs/v1-1/`.
 
 ## Commands
 
@@ -62,10 +62,10 @@ grammar  →  parser  →  semantics  →  lsp  →  vscode-ext
 
 ### Key invariants
 
-- **Text is canonical.** The Designer never owns model state independently — it issues structured edits via custom LSP requests, the LSP synthesizes `WorkspaceEdit`s, the host applies them, and the LSP re-parses. Node positions are sidecar data, stored in `<project-root>/.modeler/layout.ttrl` and managed by the LSP (hosts never touch this file directly).
+- **Text is canonical.** The Designer never owns model state independently — it issues structured edits via custom LSP requests, the LSP synthesizes `WorkspaceEdit`s, the host applies them, and the LSP re-parses. Node positions live inside each `.ttrg` file's `layout` block (v1.1; see contracts §7.1): the LSP reads them via `modeler/getLayout` and writes them by synthesizing a `WorkspaceEdit` via `modeler/setLayout` that the host applies — there is no separate sidecar file. (The original v1 `<project-root>/.modeler/layout.ttrl` sidecar was removed in v1.1 — see `docs/v1-1/` decision D4.)
 - **One LSP across hosts.** Don't add per-host language logic. New language features go in `parser` / `semantics` / `lsp`; hosts stay thin.
 - **Parser stays mechanical.** It mirrors ai-platform's Kotlin parser. Don't add resolution logic to `@modeler/parser` — that belongs in `@modeler/semantics`.
-- **Project root resolution.** Walk up looking for `modeler.toml`; otherwise treat the LSP `workspaceFolder` as root with convention defaults. Manifest schema is in §5 of the architecture doc.
+- **Project root resolution.** Walk up looking for `modeler.toml`; otherwise treat the LSP `workspaceFolder` as root with convention defaults. Manifest schema is in §5 of the architecture doc. `.modeler/` is a build artifact — never commit it (see `.gitignore`).
 - **Source locations on every AST node.** The edit synthesizer relies on file/line/column/offsets being present and accurate for surgical text patches.
 - **`SourceLocation` is ANTLR-style.** `line`/`endLine` 1-indexed, `column`/`endColumn` 0-indexed, `offsetStart`/`offsetEnd` 0-indexed with `offsetEnd` exclusive. LSP consumers subtract 1 from line numbers (see `sourceLocationToRange` in `packages/lsp/src/server.ts`). For multi-token AST spans, `endColumn = stopToken.column + stopTokenLength` — **not** `startColumn + spanLength`. The latter formula was shipped once with a relaxed test that hid the bug; re-check `walker.ts`'s `makeSourceLocation` on any future change.
 - **`vscode-languageserver` deep import.** Under Node16 module resolution the package's typings only expose the obscure `createConnection(connectionFactory, watchDog, factories?)` overload. Use `import { createConnection, ProposedFeatures } from 'vscode-languageserver/lib/node/main.js'` in source code to get the stream-accepting overloads. Tests can use `'vscode-languageserver/node'` because vitest's resolver is permissive. Reaching for `as any` to silence overload errors is wrong every time.
@@ -76,7 +76,7 @@ grammar  →  parser  →  semantics  →  lsp  →  vscode-ext
 
 ### Phase review cadence
 
-The repo uses a `/review`-driven review cycle. Reviews and task lists live at repo root as numbered artifacts: `review-NNN.md` (prose findings) and `tasks-review-NNN.md` (actionable steps with verification commands). Numbering is serial across the whole project, not per-phase. Phase-progress docs (`docs/plan/progress-phase-NN.md`) record the developer's claims; reviews verify them against runtime. Treat `[x]` marks in progress docs as intent, not truth — verify before agreeing.
+The repo uses a `/review`-driven review cycle. Reviews and task lists for v1 live under `docs/v1/implementation/` as numbered artifacts: `review-NNN.md` (prose findings) and `tasks-review-NNN.md` (actionable steps with verification commands). Numbering is serial across the whole project, not per-phase. Phase-progress docs (`docs/v1/plan/progress-phase-NN.md`) record the developer's claims; reviews verify them against runtime. Treat `[x]` marks in progress docs as intent, not truth — verify before agreeing.
 
 ## Conventions
 

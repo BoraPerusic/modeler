@@ -51,6 +51,10 @@ export type {
   SearchBlock,
   ValueLabels,
   ParameterDef,
+  ImportDecl,
+  PackageDecl,
+  GraphBlock,
+  GraphLayout,
 } from './ast.js';
 
 export async function parseDirectory(rootPath: string, recursive = true): Promise<ParseResult[]> {

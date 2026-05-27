@@ -5,6 +5,13 @@
 // produces a "Cannot redefine protected qname" load error citing both
 // source files.
 
+// TODO [v2.x]: when the conceptual model lands, revisit whether cnc.* roles
+// should live in `package cnc.cnc` (doubled form) or just `package cnc`.
+// The doubled form (cnc.cnc.role.*) matches the design intent for namespaced
+// stock vocabulary; the single form (cnc.role.*) is what we ship in v1.1.
+
+package cnc
+
 schema cnc
 
 def role fact {

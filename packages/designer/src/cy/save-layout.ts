@@ -1,4 +1,4 @@
-import type { LayoutFile, RenderableSchemaCode, ViewportState, DisplayMode } from '@modeler/lsp';
+import type { ViewportState, DisplayMode } from '@modeler/lsp';
 
 export interface CyShim {
   nodes(): Array<{ position(): { x: number; y: number }; data(k: string): unknown }>;
@@ -8,10 +8,9 @@ export interface CyShim {
 
 export function buildLayout(
   cy: CyShim,
-  viewports: Record<RenderableSchemaCode, ViewportState>,
-  active: RenderableSchemaCode,
+  currentViewport: ViewportState | null,
   displayMode: DisplayMode
-): LayoutFile {
+): { nodes: Record<string, { x: number; y: number }>; viewport: ViewportState } {
   const nodes: Record<string, { x: number; y: number }> = {};
   cy.nodes().forEach((node) => {
     const pos = node.position();
@@ -22,18 +21,14 @@ export function buildLayout(
   const pan = cy.pan();
   const zoom = cy.zoom();
 
-  const next: Record<RenderableSchemaCode, ViewportState> = {
-    db: { ...viewports.db },
-    er: { ...viewports.er },
+  const viewport: ViewportState = {
+    zoom,
+    panX: pan.x,
+    panY: pan.y,
+    displayMode: displayMode ?? currentViewport?.displayMode ?? 'just-names',
   };
-  next[active] = { zoom, panX: pan.x, panY: pan.y, displayMode };
 
-  return {
-    version: 1,
-    viewports: next,
-    nodes,
-    edges: {},
-  };
+  return { nodes, viewport };
 }
 
 export function applyPositions(

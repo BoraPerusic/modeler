@@ -82,6 +82,28 @@ describe('symbol-indexing-extended (H.4)', () => {
     expect(hasRelation.some(Boolean), `No relation found among ${res.length} symbols for query "rel"`).toBe(true);
   });
 
+  it('workspace/symbol query="ent" floats entity-kind defs (kind-prefix boost)', async () => {
+    const res = await client.sendRequest('workspace/symbol', { query: 'ent' }) as lsp.SymbolInformation[];
+    expect(res.length, `Expected at least 1 symbol for query "ent", got ${res.length}`).toBeGreaterThanOrEqual(1);
+
+    const firstKinds = await Promise.all(res.slice(0, 5).map(async (sym) => {
+      const detail = await client.sendRequest('modeler/getSymbolDetail', { qname: sym.name }) as { kind: string; perKindData?: { kind: string } } | null;
+      return detail?.perKindData?.kind ?? detail?.kind;
+    }));
+    expect(firstKinds, `top-5 kinds for "ent": ${firstKinds.join(', ')}`).toContain('entity');
+  });
+
+  it('workspace/symbol query="attr" floats attribute-kind defs (kind-prefix boost)', async () => {
+    // Attributes are nested defs, so getSymbolDetail (a known v1 nested-qname
+    // limitation) can't resolve their kind; verify via the LSP SymbolKind
+    // instead — attribute maps to SymbolKind.Field, and no other kind in this
+    // fixture does.
+    const res = await client.sendRequest('workspace/symbol', { query: 'attr' }) as lsp.SymbolInformation[];
+    expect(res.length, `Expected at least 1 symbol for query "attr", got ${res.length}`).toBeGreaterThanOrEqual(1);
+    const topKinds = res.slice(0, 5).map((sym) => sym.kind);
+    expect(topKinds, `top-5 SymbolKinds for "attr": ${topKinds.join(', ')}`).toContain(lsp.SymbolKind.Field);
+  });
+
   it('listSymbols with kinds=[relation] returns at least one relation', async () => {
     const allSymbols = await client.sendRequest('modeler/listSymbols', { kinds: ['relation'], limit: 500 }) as Array<{ qname: string; kind: string; name: string }>;
     expect(allSymbols.length, `Expected at least 1 relation symbol, got ${allSymbols.length}`).toBeGreaterThanOrEqual(1);

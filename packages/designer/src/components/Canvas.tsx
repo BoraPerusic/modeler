@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ModelGraph, DisplayMode, Cardinality, RenderableSchemaCode, ViewportState } from '@modeler/lsp';
+import type { WorkspaceEdit } from 'vscode-languageserver-types';
 import type { LspClient } from '../lsp-client';
 import { modelGraphToCyElements } from '../cy/adapter';
 import { glyphFor } from '../cy/glyph-renderer';
@@ -36,9 +37,24 @@ interface CanvasProps {
   lspClient: LspClient | null;
   projectRoot: string | null;
   onNodeSelect: (qname: string | null) => void;
+  currentViewport: ViewportState | null;
+  onRemoveNode: (qname: string) => void;
+  // Applies the WorkspaceEdit returned by modeler/setLayout so the dragged
+  // layout is written back to the .ttrg (canonical text). Without this the
+  // layout only lives in cy and is lost on export / graph reopen.
+  onLayoutPersist?: (edit: WorkspaceEdit) => void;
 }
 
-export function Canvas({ graph, displayMode, activeSchema, viewports, nodePositions, lspClient, projectRoot, onNodeSelect }: CanvasProps) {
+interface ContextMenuState {
+  visible: boolean;
+  x: number;
+  y: number;
+  qname: string;
+}
+
+export function Canvas({ graph, displayMode, activeSchema, viewports, nodePositions, lspClient, projectRoot, onNodeSelect, currentViewport, onRemoveNode, onLayoutPersist }: CanvasProps) {
+  void activeSchema;
+  void viewports;
   const containerRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
   const cyRef = useRef<CytoscapeInstance | null>(null);
@@ -48,20 +64,36 @@ export function Canvas({ graph, displayMode, activeSchema, viewports, nodePositi
   const lspClientRef = useRef<LspClient | null>(null);
   const projectRootRef = useRef<string | null>(null);
   const nodePositionsRef = useRef(nodePositions);
-  const activeSchemaRef = useRef(activeSchema);
-  const viewportsRef = useRef(viewports);
+  const currentViewportRef = useRef<ViewportState | null>(null);
   const cyInitRef = useRef(false);
   const rafRef = useRef<number | null>(null);
-  const [cyReady, setCyReady] = useState(false);
+const [cyReady, setCyReady] = useState(false);
+  const [contextMenu, setContextMenu] = useState<ContextMenuState>({ visible: false, x: 0, y: 0, qname: '' });
+  const onRemoveNodeRef = useRef(onRemoveNode);
+  const onLayoutPersistRef = useRef(onLayoutPersist);
 
   useEffect(() => { onNodeSelectRef.current = onNodeSelect; }, [onNodeSelect]);
-  useEffect(() => { displayModeRef.current = displayMode; }, [displayMode]);
+  useEffect(() => { onRemoveNodeRef.current = onRemoveNode; }, [onRemoveNode]);
+  useEffect(() => { onLayoutPersistRef.current = onLayoutPersist; }, [onLayoutPersist]);
+  useEffect(() => {
+    displayModeRef.current = displayMode;
+    const client = lspClientRef.current;
+    const graphUri = projectRootRef.current;
+    const cy = cyRef.current;
+    if (!client || !graphUri || !cy) return;
+    // Persist the just-selected display mode. buildLayout composes the live
+    // pan/zoom with this displayMode, so we must NOT use currentViewportRef
+    // here (it lags by one render and would write the previous mode).
+    const { nodes, viewport } = buildLayout(cy, currentViewportRef.current, displayMode);
+    client.setLayout(graphUri, { version: 1 as const, viewport, nodes, edges: {} })
+      .then((edit) => { if (edit) onLayoutPersistRef.current?.(edit); })
+      .catch((_err: unknown) => {});
+  }, [displayMode]);
   useEffect(() => { graphRef.current = graph; }, [graph]);
   useEffect(() => { lspClientRef.current = lspClient; }, [lspClient]);
   useEffect(() => { projectRootRef.current = projectRoot; }, [projectRoot]);
   useEffect(() => { nodePositionsRef.current = nodePositions; }, [nodePositions]);
-  useEffect(() => { activeSchemaRef.current = activeSchema; }, [activeSchema]);
-  useEffect(() => { viewportsRef.current = viewports; }, [viewports]);
+  useEffect(() => { currentViewportRef.current = currentViewport; }, [currentViewport]);
 
   useEffect(() => {
     if (cyInitRef.current || !containerRef.current) return;
@@ -134,17 +166,13 @@ export function Canvas({ graph, displayMode, activeSchema, viewports, nodePositi
 
       function saveLayout() {
         const client = lspClientRef.current;
-        const root = projectRootRef.current;
+        const graphUri = projectRootRef.current;
         const cy = cyRef.current;
-        if (!client || !root || !cy) return;
-        const layout = buildLayout(
-          cy,
-          viewportsRef.current,
-          activeSchemaRef.current,
-          displayModeRef.current,
-        );
-        client.setLayout(root, layout).catch((_err: unknown) => {
-        });
+        if (!client || !graphUri || !cy) return;
+        const { nodes, viewport } = buildLayout(cy, currentViewportRef.current, displayModeRef.current);
+        client.setLayout(graphUri, { version: 1 as const, viewport, nodes, edges: {} })
+          .then((edit) => { if (edit) onLayoutPersistRef.current?.(edit); })
+          .catch((_err: unknown) => {});
       }
 
       const debouncedSaveLayout = debounce(saveLayout, 500);
@@ -159,8 +187,22 @@ export function Canvas({ graph, displayMode, activeSchema, viewports, nodePositi
       cy.on('tap', (evt: CytoscapeInstance) => {
         if (evt.target === cy) onNodeSelectRef.current(null);
       });
+      cy.on('cxttap', 'node', (evt: CytoscapeInstance) => {
+        const data = evt.target.data();
+        const pos = evt.renderedPosition();
+        setContextMenu({ visible: true, x: pos.x, y: pos.y, qname: data['qname'] as string });
+      });
+      cy.on('tap', () => {
+        setContextMenu((prev) => prev.visible ? { ...prev, visible: false } : prev);
+      });
 
       cyRef.current = cy;
+      // Dev-only handle for the headless-browser harness (and manual debugging):
+      // lets tooling read cy.edges()/nodes() and rendered positions. Stripped
+      // from production builds.
+      if (import.meta.env.DEV) {
+        (window as unknown as { __cy?: CytoscapeInstance }).__cy = cy;
+      }
       setCyReady(true);
     });
 
@@ -172,6 +214,27 @@ export function Canvas({ graph, displayMode, activeSchema, viewports, nodePositi
       cyInitRef.current = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!contextMenu.visible) return;
+    const handlePointerDown = (e: PointerEvent) => {
+      const menu = document.querySelector('[data-context-menu]');
+      if (menu && !menu.contains(e.target as Node)) {
+        setContextMenu((prev) => prev.visible ? { ...prev, visible: false } : prev);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setContextMenu((prev) => prev.visible ? { ...prev, visible: false } : prev);
+      }
+    };
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [contextMenu.visible]);
 
   useEffect(() => {
     if (!cyRef.current) return;
@@ -306,6 +369,23 @@ export function Canvas({ graph, displayMode, activeSchema, viewports, nodePositi
         ref={overlayRef}
         style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}
       />
+      {contextMenu.visible && (
+        <div
+          data-context-menu
+          className="absolute bg-white border border-slate-300 rounded-lg shadow-lg py-1 z-50"
+          style={{ left: contextMenu.x, top: contextMenu.y, minWidth: '160px' }}
+        >
+          <button
+            onClick={() => {
+              onRemoveNodeRef.current(contextMenu.qname);
+              setContextMenu((prev) => ({ ...prev, visible: false }));
+            }}
+            className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+          >
+            Remove from graph
+          </button>
+        </div>
+      )}
     </div>
   );
 }

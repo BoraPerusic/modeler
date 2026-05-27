@@ -1,14 +1,23 @@
 // =============================================================================
-// TTR (Tatrman) v1 grammar — Phase 1.3 promotion of docs/v1/TTR-v1.g4
+// TTR (Tatrman) grammar
 //
-// Promotion fixes vs the source sketch:
-//   1. STRING_LITERAL_FORM is now a parser rule `stringLiteralForm` (the
-//      sketch had it as a lexer rule with alternation between two existing
-//      tokens, which doesn't make sense in ANTLR4's lexer FSA).
-//   2. EQ (==) is the equality operator only. The propsep '=' is EQUALS
-//      and `is` accepts COLON | EQUALS exclusively.
-//   3. The `is` parser rule renamed to `propSep` because `is` is a Kotlin
-//      keyword in the generated visitor's host language.
+// @grammar-version: 2.0
+//
+// Version scheme: X.Y — X is a breaking/major change, Y is additive
+// (syntactic sugar, new optional constructs, bug fixes). Bump the marker
+// above when changing the grammar; the prebuild script extracts it into
+// @modeler/grammar's exported TTR_GRAMMAR_VERSION. See CHANGELOG.md for
+// history.
+//
+// Changes vs v1 (promoted to 2.0 with v1.1 work):
+//   1. New top-level constructs: `package <qualifiedName>`, `import <qualifiedName>[]`,
+//      `graph <id> { ... }`.
+//   2. New lexer tokens: PACKAGE, IMPORT, GRAPH, OBJECTS, LAYOUT, STAR.
+//   3. New parser rules: packageDecl, importDecl, graphBlock, graphProperty,
+//      graphSchemaProperty, graphObjectsProperty, graphLayoutProperty, qualifiedName.
+//   4. Updated document rule to accept the new constructs.
+//   5. Extended idPart to include the new keywords so they remain usable as
+//      cross-reference components.
 // =============================================================================
 
 grammar TTR;
@@ -16,7 +25,35 @@ grammar TTR;
 // ----- Top level -----
 
 document
-  : schemaDirective? definition* EOF
+  : packageDecl? importDecl* (schemaDirective | graphBlock)? definition* EOF
+  ;
+
+packageDecl
+  : PACKAGE qualifiedName
+  ;
+
+importDecl
+  : IMPORT qualifiedName (DOT STAR)?
+  ;
+
+graphBlock
+  : GRAPH id LBRACE (graphProperty (COMMA? graphProperty)* COMMA?)? RBRACE
+  ;
+
+graphProperty
+  : graphSchemaProperty
+  | descriptionProperty
+  | tagsProperty
+  | graphObjectsProperty
+  | graphLayoutProperty
+  ;
+
+graphSchemaProperty   : SCHEMA propSep? schemaCode ;
+graphObjectsProperty  : OBJECTS propSep? LBRACK ( id (COMMA id)* )? COMMA? RBRACK ;
+graphLayoutProperty   : LAYOUT propSep? object_ ;
+
+qualifiedName
+  : id
   ;
 
 schemaDirective
@@ -76,11 +113,11 @@ er2cncRoleDef    : LBRACE (er2cncRoleProperty    (COMMA? er2cncRoleProperty)*   
 
 modelProperty            : descriptionProperty | tagsProperty | versionProperty ;
 
-tableProperty            : descriptionProperty | tagsProperty | primaryKeyProperty | columnsProperty | indicesProperty | constraintsProperty ;
+tableProperty            : descriptionProperty | tagsProperty | primaryKeyProperty | columnsProperty | indicesProperty | constraintsProperty | searchBlockProperty ;
 
-viewProperty             : descriptionProperty | tagsProperty | columnsProperty | definitionSqlProperty ;
+viewProperty             : descriptionProperty | tagsProperty | columnsProperty | definitionSqlProperty | searchBlockProperty ;
 
-columnProperty           : descriptionProperty | tagsProperty | typeProperty | optionalProperty | isKeyProperty | searchableProperty | indexedProperty ;
+columnProperty           : descriptionProperty | tagsProperty | typeProperty | optionalProperty | isKeyProperty | indexedProperty | searchBlockProperty ;
 
 indexProperty            : descriptionProperty | indexTypeProperty | columnNamesListProperty ;
 
@@ -92,9 +129,9 @@ procedureProperty        : descriptionProperty | tagsProperty | parametersProper
 
 entityProperty           : descriptionProperty | tagsProperty | labelPluralProperty | nameAttributeProperty | codeAttributeProperty | aliasesProperty | attributesProperty | rolesProperty | displayLabelProperty | searchBlockProperty ;
 
-attributeProperty        : descriptionProperty | tagsProperty | typeProperty | isKeyProperty | optionalProperty | searchableProperty | valueLabelsProperty | displayLabelProperty | searchBlockProperty ;
+attributeProperty        : descriptionProperty | tagsProperty | typeProperty | isKeyProperty | optionalProperty | valueLabelsProperty | displayLabelProperty | searchBlockProperty ;
 
-relationProperty         : descriptionProperty | tagsProperty | fromProperty | toProperty | cardinalityProperty | joinProperty ;
+relationProperty         : descriptionProperty | tagsProperty | fromProperty | toProperty | cardinalityProperty | joinProperty | searchBlockProperty ;
 
 er2dbEntityProperty      : descriptionProperty | tagsProperty | entityProperty_ | targetProperty | whereFilterProperty ;
 
@@ -162,12 +199,13 @@ rolesProperty             : ROLES             propSep? listOfIds ;
 valueLabelsProperty       : VALUE_LABELS      propSep? valueLabelsBody ;
 roleProperty_             : ROLE              propSep? id ;
 
-// Search feature — `search { keywords {...} patterns [...] descriptions {...} examples [...] aliases [...] }`
+// Search feature — `search { keywords {...} patterns [...] descriptions {...} examples [...] aliases [...] searchable: true, fuzzy: true }`
 searchBlockProperty       : SEARCH            propSep? searchBlock ;
 keywordsProperty          : KEYWORDS          propSep? localizedStringList ;
 patternsProperty          : PATTERNS          propSep? listOfStrings ;
 descriptionsProperty      : DESCRIPTIONS      propSep? localizedStringList ;
 examplesProperty          : EXAMPLES          propSep? listOfStrings ;
+fuzzyProperty             : FUZZY             propSep? BOOLEAN_LITERAL ;
 
 // ----- Inline def lists -----
 
@@ -289,6 +327,8 @@ searchSubProperty
   | descriptionsProperty
   | examplesProperty
   | aliasesProperty
+  | searchableProperty
+  | fuzzyProperty
   ;
 
 object_
@@ -332,6 +372,8 @@ idPart
   | MODEL
   | NAME | LABEL | DIRECTION                              // common as identifiers / object keys (e.g. `def column name`)
   | FROM | TO                                            // allowed as object property keys (e.g. cardinality, join pairs)
+  | PACKAGE | IMPORT | GRAPH                              // v1.1 new top-level keywords
+  | OBJECTS | LAYOUT                                      // v1.1 graph body keywords
   ;
 
 // =============================================================================
@@ -341,6 +383,12 @@ idPart
 DEF        : 'def' ;
 SCHEMA     : 'schema' ;
 NAMESPACE  : 'namespace' ;
+
+PACKAGE    : 'package' ;    // v1.1
+IMPORT     : 'import' ;     // v1.1
+GRAPH      : 'graph' ;      // v1.1
+OBJECTS    : 'objects' ;    // v1.1 graph body
+LAYOUT     : 'layout' ;     // v1.1 graph body
 
 DB    : 'db' ;
 ER    : 'er' ;
@@ -402,7 +450,7 @@ DISPLAY_LABEL     : 'displayLabel' ;
 VALUE_LABELS      : 'valueLabels' ;
 ROLES             : 'roles' ;
 
-// Search feature — `search { keywords {...} patterns [...] descriptions {...} examples [...] aliases [...] }`.
+// Search feature — `search { keywords {...} patterns [...] descriptions {...} examples [...] aliases [...] searchable: true, fuzzy: true }`.
 // `aliases` reuses the existing ALIASES token. `description` (single) and `descriptions` (list) are
 // distinct lexemes — ANTLR longest-match handles disambiguation.
 SEARCH            : 'search' ;
@@ -410,6 +458,7 @@ KEYWORDS          : 'keywords' ;
 PATTERNS          : 'patterns' ;
 DESCRIPTIONS      : 'descriptions' ;
 EXAMPLES          : 'examples' ;
+FUZZY             : 'fuzzy' ;
 
 FROM : 'from' ;
 TO   : 'to' ;
@@ -456,6 +505,7 @@ RBRACK : ']' ;
 LPAREN : '(' ;
 RPAREN : ')' ;
 DOT    : '.' ;
+STAR   : '*' ;    // v1.1 wildcard for `import x.y.*`
 
 // Literals
 NULL_LITERAL          : 'null' ;

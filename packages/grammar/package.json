@@ -1,6 +1,6 @@
 {
   "name": "@modeler/grammar",
-  "version": "0.1.0",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
   "main": "./dist/index.js",
@@ -10,15 +10,18 @@
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
     },
-    "./grammar": "./src/TTR.g4"
+    "./grammar": "./src/TTR.g4",
+    "./generated/property-map": "./src/generated/property-map.ts"
   },
   "scripts": {
+    "prebuild": "tsx scripts/extract-property-map.ts",
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
     "typescript": "^5.7.0"
   },
   "dependencies": {

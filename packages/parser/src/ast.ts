@@ -141,6 +141,9 @@ export interface SearchBlock {
   descriptions?: LocalizedStringList;
   examples?: string[];
   aliases?: string[];
+  searchable?: boolean;
+  fuzzy?: boolean;
+  duplicateProperties?: string[];
   source: SourceLocation;
 }
 
@@ -191,6 +194,7 @@ export interface TableDef {
   columns?: ColumnDef[];
   indices?: IndexDef[];
   constraints?: ConstraintDef[];
+  search?: SearchBlock;
 }
 
 export interface ViewDef {
@@ -201,6 +205,7 @@ export interface ViewDef {
   tags?: string[];
   columns?: ColumnDef[];
   definitionSql?: StringValue | TripleStringValue;
+  search?: SearchBlock;
 }
 
 export interface ColumnDef {
@@ -212,8 +217,8 @@ export interface ColumnDef {
   type?: DataType;
   optional?: boolean;
   isKey?: boolean;
-  searchable?: boolean;
   indexed?: boolean;
+  search?: SearchBlock;
 }
 
 export interface IndexDef {
@@ -279,7 +284,6 @@ export interface AttributeDef {
   type?: DataType;
   isKey?: boolean;
   optional?: boolean;
-  searchable?: boolean;
   valueLabels?: ValueLabels;
   displayLabel?: LocalizedString;
   search?: SearchBlock;
@@ -295,6 +299,7 @@ export interface RelationDef {
   to?: PropertyValue;
   cardinality?: ObjectValue;
   join?: ListValue;
+  search?: SearchBlock;
 }
 
 export interface Er2dbEntityDef {
@@ -383,8 +388,48 @@ export type Definition =
 // Document / parse result
 // ============================================================================
 
+export interface PackageDecl {
+  kind: 'packageDecl';
+  name: string;
+  parts: string[];
+  source: SourceLocation;
+}
+
+export interface ImportDecl {
+  kind: 'importDecl';
+  target: string;
+  targetParts: string[];
+  wildcard: boolean;
+  source: SourceLocation;
+}
+
+export interface GraphLayout {
+  viewport?: {
+    zoom: number;
+    panX: number;
+    panY: number;
+    displayMode: string; // Validated against the DisplayMode union in §11.2 by the semantics layer.
+  };
+  nodes: Record<string, { x: number; y: number }>;
+  edges: Record<string, { bendPoints?: [number, number][] }>;
+}
+
+export interface GraphBlock {
+  kind: 'graphBlock';
+  name: string;
+  schema?: 'db' | 'er' | 'map' | 'query' | 'cnc';
+  description?: string;
+  tags?: string[];
+  objects: string[];
+  layout?: GraphLayout;
+  source: SourceLocation;
+}
+
 export interface Document {
+  packageDecl?: PackageDecl;
+  imports: ImportDecl[];
   schemaDirective?: SchemaDirective;
+  graph?: GraphBlock;
   definitions: Definition[];
   source: SourceLocation;
 }

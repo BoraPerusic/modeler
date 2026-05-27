@@ -1,10 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, cleanup } from '@testing-library/react';
 
-const { mockOpenDocument, mockSetLayout, mockLoadDemoFiles } = vi.hoisted(() => ({
+const { mockOpenDocument, mockSetLayout, mockLoadDemoFiles, mockSetProjectRoot, mockListGraphs } = vi.hoisted(() => ({
   mockOpenDocument: vi.fn().mockResolvedValue(undefined),
   mockSetLayout: vi.fn().mockResolvedValue({ ok: true }),
   mockLoadDemoFiles: vi.fn(),
+  mockSetProjectRoot: vi.fn().mockResolvedValue({ projectRoot: 'file:///v1.1-mini' }),
+  mockListGraphs: vi.fn().mockResolvedValue({ graphs: [] }),
 }));
 
 vi.mock('cytoscape', () => {
@@ -34,6 +36,8 @@ vi.mock('../lsp-client.ts', () => ({
   createLspClient: vi.fn().mockResolvedValue({
     transportKind: 'browser',
     openDocument: mockOpenDocument,
+    setProjectRoot: mockSetProjectRoot,
+    listGraphs: mockListGraphs,
     onDiagnostics: vi.fn(),
     dispose: vi.fn(),
     getModelGraph: vi.fn().mockResolvedValue({ nodes: [], edges: [] }),
@@ -64,37 +68,46 @@ describe('App demo loading (G-4)', () => {
     mockOpenDocument.mockClear();
     mockSetLayout.mockClear();
     mockLoadDemoFiles.mockClear();
+    mockSetProjectRoot.mockClear();
+    mockListGraphs.mockClear();
   });
   afterEach(() => {
     cleanup();
     window.history.replaceState(null, '', '/');
   });
 
-  it('with ?demo=v1-metadata, calls loadDemoFiles and opens each file', async () => {
-    window.history.replaceState(null, '', '/?demo=v1-metadata');
-    const files = new Map([['modeler.toml', 'content'], ['db.ttr', 'content']]);
-    mockLoadDemoFiles.mockResolvedValue({ rootName: 'v1-metadata', files });
+  it('with ?demo=v1.1-mini, sets the project root then opens only .ttr/.ttrg files', async () => {
+    window.history.replaceState(null, '', '/?demo=v1.1-mini');
+    const files = new Map([['modeler.toml', 'content'], ['billing/invoicing/db.ttr', 'content']]);
+    mockLoadDemoFiles.mockResolvedValue({ rootName: 'v1.1-mini', files });
 
     render(<App />);
 
-    await waitFor(() => expect(mockLoadDemoFiles).toHaveBeenCalledWith('v1-metadata'));
-    await waitFor(() => expect(mockOpenDocument).toHaveBeenCalledTimes(2));
-    expect(mockOpenDocument).toHaveBeenCalledWith('file:///v1-metadata/modeler.toml', 'content');
-    expect(mockOpenDocument).toHaveBeenCalledWith('file:///v1-metadata/db.ttr', 'content');
+    await waitFor(() => expect(mockLoadDemoFiles).toHaveBeenCalledWith('v1.1-mini'));
+    // Project root must be declared before any document is opened so package
+    // inference is correct (browser worker has no workspace folder).
+    await waitFor(() => expect(mockSetProjectRoot).toHaveBeenCalledWith('file:///v1.1-mini'));
+    await waitFor(() => expect(mockOpenDocument).toHaveBeenCalledTimes(1));
+    expect(mockOpenDocument).toHaveBeenCalledWith('file:///v1.1-mini/billing/invoicing/db.ttr', 'content');
+    // modeler.toml is config, not TTR — it must NOT be opened as a ttr document.
+    expect(mockOpenDocument).not.toHaveBeenCalledWith('file:///v1.1-mini/modeler.toml', 'content');
+    // The demo must populate the graph picker (regression: it previously skipped
+    // listGraphs, so the picker showed "0 graphs found").
+    await waitFor(() => expect(mockListGraphs).toHaveBeenCalledWith('file:///v1.1-mini'));
   });
 
   it('without ?demo flag, does not call loadDemoFiles or openDocument', async () => {
     window.history.replaceState(null, '', '/');
     render(<App />);
-    await waitFor(() => screen.getByText('Open Demo (v1-metadata)'));
+    await waitFor(() => screen.getByText('Open Demo (v1.1-mini)'));
     expect(mockLoadDemoFiles).not.toHaveBeenCalled();
     expect(mockOpenDocument).not.toHaveBeenCalled();
   });
 
   it('after demo load, displayMode does not trigger spurious setLayout (N-5 regression)', async () => {
-    window.history.replaceState(null, '', '/?demo=v1-metadata');
-    const files = new Map([['modeler.toml', 'content']]);
-    mockLoadDemoFiles.mockResolvedValue({ rootName: 'v1-metadata', files });
+    window.history.replaceState(null, '', '/?demo=v1.1-mini');
+    const files = new Map([['billing/invoicing/db.ttr', 'content']]);
+    mockLoadDemoFiles.mockResolvedValue({ rootName: 'v1.1-mini', files });
 
     render(<App />);
 

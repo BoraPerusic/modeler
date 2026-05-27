@@ -1,16 +1,27 @@
-import type { RenderableSchemaCode, DisplayMode, LayoutFile, SymbolDetail, ModelGraph } from '@modeler/lsp';
-import type { DesignerState } from './designer-state';
+import type { GraphMetadata, GetGraphResponse, SymbolDetail, GraphLayoutOutput } from '@modeler/lsp';
+import type { DesignerState, ViewportState, DisplayMode } from './designer-state';
+
+export interface GraphLayoutInput {
+  version: number;
+  viewports?: Record<string, { zoom: number; panX: number; panY: number; displayMode: string }>;
+  nodes: Record<string, { x: number; y: number }>;
+  edges: Record<string, { bendPoints?: [number, number][] }>;
+}
 
 export type DesignerAction =
   | { type: 'loadProject'; projectUri: string }
-  | { type: 'loadLayout'; layout: LayoutFile }
-  | { type: 'switchSchema'; schema: RenderableSchemaCode }
-  | { type: 'setDisplayMode'; schema: RenderableSchemaCode; mode: DisplayMode }
-  | { type: 'setViewport'; schema: RenderableSchemaCode; viewport: { zoom: number; panX: number; panY: number } }
+  | { type: 'storeGraphList'; graphs: GraphMetadata[] }
+  | { type: 'openGraph'; graphUri: string }
+  | { type: 'closeGraph' }
+  | { type: 'storeGraph'; graph: GetGraphResponse }
+  | { type: 'loadLayout'; layout: GraphLayoutOutput }
+  | { type: 'startCreateWizard' }
+  | { type: 'cancelCreateWizard' }
+  | { type: 'setViewport'; viewport: Omit<ViewportState, 'displayMode'> }
+  | { type: 'setDisplayMode'; mode: DisplayMode }
   | { type: 'setNodePosition'; qname: string; x: number; y: number }
   | { type: 'selectSymbol'; qname: string | null }
   | { type: 'storeSymbolDetail'; detail: SymbolDetail }
-  | { type: 'storeGraph'; schema: RenderableSchemaCode; graph: ModelGraph }
   | { type: 'setError'; message: string | null };
 
 export function designerReducer(state: DesignerState, action: DesignerAction): DesignerState {
@@ -19,37 +30,55 @@ export function designerReducer(state: DesignerState, action: DesignerAction): D
       return {
         ...state,
         projectUri: action.projectUri,
+        availableGraphs: [],
+        currentGraphUri: null,
+        currentGraph: null,
+        nodePositions: {},
         symbolDetails: {},
-        graphsBySchema: { db: null, er: null },
+        currentViewport: null,
+        creatingGraph: false,
+        error: null,
       };
+    case 'storeGraphList':
+      return { ...state, availableGraphs: action.graphs };
+    case 'openGraph':
+      return {
+        ...state,
+        currentGraphUri: action.graphUri,
+        currentGraph: null,
+        nodePositions: {},
+        currentViewport: null,
+      };
+    case 'closeGraph':
+      return { ...state, currentGraphUri: null, currentGraph: null };
+    case 'storeGraph':
+      return { ...state, currentGraph: action.graph };
     case 'loadLayout':
       return {
         ...state,
-        viewports: action.layout.viewports,
-        nodePositions: action.layout.nodes,
+        nodePositions: action.layout.nodes ?? {},
+        currentViewport: action.layout.viewport
+          ? { zoom: action.layout.viewport.zoom, panX: action.layout.viewport.panX, panY: action.layout.viewport.panY, displayMode: action.layout.viewport.displayMode as DisplayMode }
+          : null,
       };
-    case 'switchSchema':
-      return { ...state, activeSchema: action.schema };
-    case 'setDisplayMode':
-      return {
-        ...state,
-        viewports: {
-          ...state.viewports,
-          [action.schema]: {
-            ...state.viewports[action.schema],
-            displayMode: action.mode,
-          },
-        },
-      };
+    case 'startCreateWizard':
+      return { ...state, creatingGraph: true };
+    case 'cancelCreateWizard':
+      return { ...state, creatingGraph: false };
     case 'setViewport':
       return {
         ...state,
-        viewports: {
-          ...state.viewports,
-          [action.schema]: {
-            ...state.viewports[action.schema],
-            ...action.viewport,
-          },
+        currentViewport: {
+          ...state.currentViewport ?? { zoom: 1, panX: 0, panY: 0, displayMode: 'just-names' },
+          ...action.viewport,
+        },
+      };
+    case 'setDisplayMode':
+      return {
+        ...state,
+        currentViewport: {
+          ...state.currentViewport ?? { zoom: 1, panX: 0, panY: 0, displayMode: 'just-names' },
+          displayMode: action.mode,
         },
       };
     case 'setNodePosition':
@@ -71,14 +100,6 @@ export function designerReducer(state: DesignerState, action: DesignerAction): D
         symbolDetails: {
           ...state.symbolDetails,
           [action.detail.qname]: action.detail,
-        },
-      };
-    case 'storeGraph':
-      return {
-        ...state,
-        graphsBySchema: {
-          ...state.graphsBySchema,
-          [action.schema]: action.graph,
         },
       };
     case 'setError':

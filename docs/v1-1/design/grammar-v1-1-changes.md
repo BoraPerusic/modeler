@@ -338,9 +338,12 @@ Modeler will share its full fixture set under `samples/v1.1-*/` and `samples/bro
 
 ## 8. Open items
 
-1. **§4.3 — stock-vocab qname.** Awaiting ai-platform's preference among options (a)/(b)/(c).
-2. **§3.2 — grammar-level vs semantic-level enforcement** of "one or the other" (graph block vs definitions). Either is acceptable; ai-platform's preference?
-3. **§4.5 — diagnostic emission** during ai-platform's metadata loading. Modeler's LSP emits all of these for editor experience; ai-platform decides which are load-blocking and which are warnings in its own logs.
+~~1. **§4.3 — stock-vocab qname.** Awaiting ai-platform's preference among options (a)/(b)/(c).~~ **RESOLVED:** option (b) adopted — `cnc.role.fact` (single `cnc` prefix) with auto-import of `cnc.*`. Files in any package can reference `cnc.role.*` with no explicit import. Stock roles are declared in `package cnc`; qnames resolve to `cnc.cnc.role.<defName>` internally.
+
+~~2. **§3.2 — grammar-level vs semantic-level enforcement** of "one or the other" (graph block vs definitions).~~ **RESOLVED:** semantic-level enforcement. The grammar accepts both a `graphBlock` and `definition`s in the same document; Modeler's validator enforces the mutual exclusivity and emits `ttr/wrong-file-kind` for violations.
+
+~~3. **§4.5 — diagnostic emission** during ai-platform's metadata loading.~~ **RESOLVED:** guidance given in §4.5 table. At minimum, emit `ttr/unimported-reference` (Error) and `ttr/wrong-file-kind` (Error) during load. Others are LSP-editor signals that don't need to block loading.
+
 4. **Coordination window duration.** Bora to confirm when ai-platform is ready to consume v2.0.0; once known, Modeler updates the sync CI's "warn vs block" mode accordingly.
 
 These items are non-blocking for Modeler 1.1.A merging but need resolution before Modeler v1.1.0 ships.

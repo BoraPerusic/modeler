@@ -4,7 +4,7 @@ VS Code extension for TTR (Tatrman) language support. Thin shim around the share
 
 ## Features
 
-- Language registration for `.ttr` and `.ttrl` files (icons + `language-configuration.json`)
+- Language registration for `.ttr` files (icons + `language-configuration.json`)
 - Syntax highlighting via the TextMate grammar generated from `TTR.g4`
 - LSP integration: diagnostics, hover, go-to-definition, find-references, workspace symbols, semantic-token highlighting
 - Stub command: `modeler.openInDesigner` (Designer integration arrives in v1.x)

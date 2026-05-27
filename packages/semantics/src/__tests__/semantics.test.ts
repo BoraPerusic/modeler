@@ -1,7 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import { parseManifest, resolveManifest } from '../manifest.js';
-import { findProjectRoot, loadProject } from '../project-node.js';
-import { loadProjectFromOpenDocuments } from '../project.js';
 
 describe('manifest', () => {
   it('parseManifest parses valid TOML', () => {

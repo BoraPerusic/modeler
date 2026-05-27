@@ -19,7 +19,7 @@
     "lint": "eslint src",
     "test": "vitest run",
     "test:smoke": "pnpm run build && node ./dist/test/runTests.js",
-    "build-generator": "tsc scripts/generate-tm-grammar.ts --outDir scripts --module nodenext --target es2022 --moduleResolution nodenext",
+    "build-generator": "tsc scripts/generate-tm-grammar.ts --outDir scripts --module nodenext --target es2022 --moduleResolution nodenext --isolatedModules",
     "regen-tmgrammar": "pnpm run build-generator && node scripts/generate-tm-grammar.js"
   },
   "dependencies": {
@@ -54,20 +54,17 @@
         }
       },
       {
-        "id": "ttrl",
+        "id": "ttrg",
         "extensions": [
-          ".ttrl"
+          ".ttrg"
         ],
         "aliases": [
-          "TTR Layout"
+          "TTR Graph"
         ],
-        "mimetypes": [
-          "application/ttrl+json"
-        ],
-        "configuration": "./language-configuration-ttrl.json",
+        "configuration": "./language-configuration.json",
         "icon": {
-          "light": "./icons/ttrl.svg",
-          "dark": "./icons/ttrl.svg"
+          "light": "./icons/ttrg.svg",
+          "dark": "./icons/ttrg.svg"
         }
       }
     ],
@@ -78,15 +75,9 @@
         "path": "./syntaxes/ttr.tmLanguage.json"
       },
       {
-        "language": "ttrl",
-        "scopeName": "source.ttrl",
-        "path": "./syntaxes/ttrl.tmLanguage.json"
-      }
-    ],
-    "jsonValidation": [
-      {
-        "fileMatch": "*.ttrl",
-        "url": "./schemas/ttrl.schema.json"
+        "language": "ttrg",
+        "scopeName": "source.ttrg",
+        "path": "./syntaxes/ttrg.tmLanguage.json"
       }
     ],
     "configuration": {
@@ -102,6 +93,37 @@
           ],
           "default": "off",
           "description": "Traces the communication between VS Code and the TTR language server."
+        },
+        "modeler.completion.autoImport": {
+          "type": "boolean",
+          "default": true,
+          "description": "When completing a reference to an unimported symbol, automatically insert the appropriate import statement."
+        },
+        "modeler.completion.preselectFullyQualified": {
+          "type": "boolean",
+          "default": false,
+          "description": "When both a fully-qualified name and a bare name match, preselect the FQN over the bare name."
+        },
+        "modeler.format.separator": {
+          "type": "string",
+          "enum": ["newline", "comma", "preserve"],
+          "default": "preserve",
+          "description": "How a definition's properties are separated when formatting: 'newline' = one per line, 'comma' = on one line, 'preserve' = keep the original layout (break multi-line defs, inline single-line)."
+        },
+        "modeler.format.alignKeys": {
+          "type": "boolean",
+          "default": false,
+          "description": "Align property values by padding keys to the longest key in each broken property block."
+        },
+        "modeler.format.indentSpaces": {
+          "type": "number",
+          "default": 4,
+          "description": "Number of spaces per indentation level when formatting."
+        },
+        "modeler.format.width": {
+          "type": "number",
+          "default": 100,
+          "description": "Preferred maximum line width before the formatter breaks a group onto multiple lines."
         }
       }
     },
@@ -114,6 +136,7 @@
     ]
   },
   "activationEvents": [
-    "onLanguage:ttr"
+    "onLanguage:ttr",
+    "onLanguage:ttrg"
   ]
 }

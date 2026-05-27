@@ -1,28 +1,36 @@
-import type { RenderableSchemaCode, ViewportState as LspViewportState, SymbolDetail, ModelGraph } from '@modeler/lsp';
+import type { GraphMetadata, GetGraphResponse, SymbolDetail } from '@modeler/lsp';
 
-export { LspViewportState as ViewportState };
+export type DisplayMode = 'just-names' | 'with-types' | 'with-constraints';
+
+export interface ViewportState {
+  zoom: number;
+  panX: number;
+  panY: number;
+  displayMode: DisplayMode;
+}
 
 export interface DesignerState {
-  activeSchema: RenderableSchemaCode;
-  viewports: Record<RenderableSchemaCode, LspViewportState>;
+  projectUri: string | null;
+  availableGraphs: GraphMetadata[];
+  currentGraphUri: string | null;
+  currentGraph: GetGraphResponse | null;
+  currentViewport: ViewportState | null;
   nodePositions: Record<string, { x: number; y: number }>;
   symbolDetails: Record<string, SymbolDetail>;
   selectedSymbol: { qname: string } | null;
-  projectUri: string | null;
+  creatingGraph: boolean;
   error: string | null;
-  graphsBySchema: Record<RenderableSchemaCode, ModelGraph | null>;
 }
 
 export const initialDesignerState: DesignerState = {
-  activeSchema: 'db',
-  viewports: {
-    db: { zoom: 1.0, panX: 0, panY: 0, displayMode: 'with-types' },
-    er: { zoom: 1.0, panX: 0, panY: 0, displayMode: 'just-names' },
-  },
+  projectUri: null,
+  availableGraphs: [],
+  currentGraphUri: null,
+  currentGraph: null,
+  currentViewport: null,
   nodePositions: {},
   symbolDetails: {},
   selectedSymbol: null,
-  projectUri: null,
+  creatingGraph: false,
   error: null,
-  graphsBySchema: { db: null, er: null },
 };

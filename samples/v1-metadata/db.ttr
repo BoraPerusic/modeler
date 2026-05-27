@@ -2,6 +2,7 @@ schema db namespace dbo
 
 def table QCENSKUP_DF { description: """Evidence obchodních kanálů a jejich vlastností.
 """, primaryKey: ["id_obchodního_kanálu"],
+    search { searchable: true },
     columns: [
         def column IDCENSKUP { type: int, isKey: true, description: "Unikátní identifikátor obchodního kanálu", },
         def column CEN_SKUP { type: text, optional: true, description: "Unikátní kód obchodního kanálu", },
@@ -611,7 +612,7 @@ Typ artiklu je určen hodnotou VLPODTYP_SLOZ:
     columns: [
         def column IDZBOZI { type: int, isKey: true, description: "Unikátní identifikátor artiklu", },
         def column CIS_ZBOZI { type: text, optional: true, description: "Unikátní kód artiklu", },
-        def column NAZEV_ZBOZI { type: text, optional: true, description: "Obchodní název artiklu", },
+        def column NAZEV_ZBOZI { type: text, optional: true, description: "Obchodní název artiklu", search { searchable: true, fuzzy: true } },
         def column VLPODTYP_SLOZ { type: int, optional: true, description: "Typ artiklu (1 = Výrobek, 2 = Zboží, 3 = Materiál, 4 = Polotovar)", },
         def column IDSKUPZBOZI { type: int, optional: true, description: "Vazba na nadřazený produkt", },
         def column IDXXPODSKUPZBOZI { type: int, optional: true, description: "Vazba na nadřazený podprodukt", },

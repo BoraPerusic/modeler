@@ -49,6 +49,9 @@ import {
   ParameterDefListContext,
   ListOfStringsContext,
   ListOfIdsContext,
+  PackageDeclContext,
+  ImportDeclContext,
+  GraphBlockContext,
 } from './generated/TTRParser.js';
 import type {
   SourceLocation,
@@ -96,6 +99,10 @@ import type {
   QueryDef,
   RoleDef,
   Er2cncRoleDef,
+  PackageDecl,
+  ImportDecl,
+  GraphBlock,
+  GraphLayout,
 } from './ast.js';
 import { DiagnosticCode } from './diagnostics.js';
 import { RecoveryReportingStrategy } from './recovery.js';
@@ -161,9 +168,9 @@ export function parseString(content: string, fileLabel = '<string>'): ParseResul
 
   try {
     const tree = parser.document();
-    const doc = walkDocument(tree, fileLabel);
+    const { doc, errors: docErrors } = walkDocument(tree, fileLabel, errors);
     for (const event of recoveryStrategy.recoveryEvents) {
-      errors.push({
+      docErrors.push({
         code: DiagnosticCode.ParseRecoveryInfo,
         message: event.description,
         severity: 'info',
@@ -178,7 +185,7 @@ export function parseString(content: string, fileLabel = '<string>'): ParseResul
         },
       });
     }
-    return { ast: doc, errors, sourceFile: fileLabel };
+    return { ast: doc, errors: docErrors, sourceFile: fileLabel };
   } catch (e) {
     return {
       errors: [
@@ -200,19 +207,47 @@ export async function parseFile(filePath: string): Promise<ParseResult> {
   return parseString(content, filePath);
 }
 
-function walkDocument(ctx: DocumentContext, file: string): Document {
+function walkDocument(ctx: DocumentContext, file: string, syntaxErrors: ParseError[]): { doc: Document; errors: ParseError[] } {
+  const localErrors: ParseError[] = [...syntaxErrors];
+
+  const packageCtx = ctx.packageDecl();
+  const importCtxs = ctx.importDecl();
   const schemaCtx = ctx.schemaDirective();
+  const graphCtx = ctx.graphBlock();
   const defContexts = ctx.definition();
 
   const definitions: Definition[] = defContexts.map((defCtx: DefinitionContext) =>
     walkDefinition(defCtx, file)
   );
 
-  return {
+  if (graphCtx && definitions.length > 0) {
+    localErrors.push({
+      code: DiagnosticCode.WrongFileKind,
+      message: "A file containing 'graph { ... }' must not also contain top-level 'def' definitions.",
+      severity: 'error',
+      source: makeSourceLocation(graphCtx, file),
+    });
+  }
+
+  if (file.endsWith('.ttrg') && !graphCtx) {
+    localErrors.push({
+      code: DiagnosticCode.WrongFileKind,
+      message: "A '.ttrg' file must contain a 'graph { ... }' block.",
+      severity: 'error',
+      source: makeSourceLocation(ctx, file),
+    });
+  }
+
+  const doc: Document = {
+    packageDecl: packageCtx ? walkPackageDecl(packageCtx, file) : undefined,
+    imports: importCtxs.map((ic) => walkImportDecl(ic, file)),
     schemaDirective: schemaCtx ? walkSchemaDirective(schemaCtx, file) : undefined,
+    graph: graphCtx ? walkGraphBlock(graphCtx, file) : undefined,
     definitions,
     source: makeSourceLocation(ctx, file),
   };
+
+  return { doc, errors: localErrors };
 }
 
 function walkSchemaDirective(ctx: SchemaDirectiveContext, file: string): SchemaDirective {
@@ -231,6 +266,156 @@ function walkSchemaDirective(ctx: SchemaDirectiveContext, file: string): SchemaD
     namespace: namespaceCtx ? namespaceCtx.getText() : undefined,
     source: makeSourceLocation(ctx, file),
   };
+}
+
+function walkPackageDecl(ctx: PackageDeclContext, file: string): PackageDecl {
+  const qnameCtx = ctx.qualifiedName();
+  const idCtx = qnameCtx.id();
+  const parts = idCtx.idPart().map((pt) => pt.getText());
+  return {
+    kind: 'packageDecl',
+    name: parts.join('.'),
+    parts,
+    source: makeSourceLocation(ctx, file),
+  };
+}
+
+function walkImportDecl(ctx: ImportDeclContext, file: string): ImportDecl {
+  const qnameCtx = ctx.qualifiedName();
+  const idCtx = qnameCtx.id();
+  const parts = idCtx.idPart().map((pt) => pt.getText());
+  return {
+    kind: 'importDecl',
+    target: parts.join('.'),
+    targetParts: parts,
+    wildcard: ctx.STAR() !== null,
+    source: makeSourceLocation(ctx, file),
+  };
+}
+
+function walkGraphBlock(ctx: GraphBlockContext, file: string): GraphBlock {
+  const nameCtx = ctx.id();
+  const name = nameCtx ? nameCtx.getText() : '';
+
+  let schema: 'db' | 'er' | 'map' | 'query' | 'cnc' | undefined;
+  let description: string | undefined;
+  let tags: string[] | undefined;
+  let objects: string[] = [];
+  let layout: GraphLayout | undefined;
+
+  for (const gp of ctx.graphProperty()) {
+    if (gp.graphSchemaProperty()) {
+      const sc = gp.graphSchemaProperty()!.schemaCode();
+      if (sc.DB()) schema = 'db';
+      else if (sc.ER()) schema = 'er';
+      else if (sc.MAP()) schema = 'map';
+      else if (sc.QUERY()) schema = 'query';
+      else if (sc.CNC()) schema = 'cnc';
+    }
+    if (gp.descriptionProperty()) {
+      const parsed = walkStringLiteralForm(gp.descriptionProperty()!.stringLiteralForm()!, file);
+      description = parsed.value;
+    }
+    if (gp.tagsProperty()) {
+      tags = walkListOfStrings(gp.tagsProperty()!.listOfStrings()!, file);
+    }
+    if (gp.graphObjectsProperty()) {
+      objects = gp.graphObjectsProperty()!.id().map((idCtx) => {
+        const parts = idCtx.idPart().map((pt) => pt.getText());
+        return parts.join('.');
+      });
+    }
+    if (gp.graphLayoutProperty()) {
+      layout = walkGraphLayout(gp.graphLayoutProperty()!.object_(), file);
+    }
+  }
+
+  return { kind: 'graphBlock', name, schema, description, tags, objects, layout, source: makeSourceLocation(ctx, file) };
+}
+
+function walkGraphLayout(ctx: Object_Context, file: string): GraphLayout {
+  let viewport: GraphLayout['viewport'] | undefined;
+  const nodes: Record<string, { x: number; y: number }> = {};
+  const edges: Record<string, { bendPoints?: [number, number][] }> = {};
+
+  for (const entry of ctx.propertyList()?.propertyEntry() ?? []) {
+    const key = entry.key().getText();
+    const valueCtx = entry.value();
+    if (!valueCtx) continue;
+
+    if (key === 'viewport' && valueCtx.object_()) {
+      viewport = walkViewport(valueCtx.object_()!, file);
+    } else if (key === 'nodes' && valueCtx.object_()) {
+      for (const nodeEntry of valueCtx.object_()!.propertyList()?.propertyEntry() ?? []) {
+        const nodeKey = nodeEntry.key().getText();
+        const nodeVal = nodeEntry.value()?.object_();
+        if (nodeVal) {
+          const xEntry = nodeVal.propertyList()?.propertyEntry().find((e) => e.key().getText() === 'x');
+          const yEntry = nodeVal.propertyList()?.propertyEntry().find((e) => e.key().getText() === 'y');
+          const x = xEntry?.value()?.literal()?.NUMBER_LITERAL() ? Number(xEntry.value()!.literal()!.NUMBER_LITERAL()!.getText()) : 0;
+          const y = yEntry?.value()?.literal()?.NUMBER_LITERAL() ? Number(yEntry.value()!.literal()!.NUMBER_LITERAL()!.getText()) : 0;
+          nodes[nodeKey] = { x, y };
+        }
+      }
+    } else if (key === 'edges' && valueCtx.object_()) {
+      for (const edgeEntry of valueCtx.object_()!.propertyList()?.propertyEntry() ?? []) {
+        const edgeKey = edgeEntry.key().getText();
+        const edgeVal = edgeEntry.value()?.object_();
+        if (!edgeVal) continue;
+
+        const bpEntry = edgeVal.propertyList()?.propertyEntry()
+          .find((e) => e.key().getText() === 'bendPoints');
+        const bpList  = bpEntry?.value()?.list();
+        if (!bpList) {
+          edges[edgeKey] = {};
+          continue;
+        }
+
+        const bendPoints: [number, number][] = [];
+        for (const item of bpList.value()) {
+          const inner = item.list();
+          if (!inner) continue;
+          const pair = inner.value();
+          if (pair.length !== 2) continue;
+          const a = pair[0].literal()?.NUMBER_LITERAL();
+          const b = pair[1].literal()?.NUMBER_LITERAL();
+          if (a && b) {
+            bendPoints.push([Number(a.getText()), Number(b.getText())]);
+          }
+        }
+        edges[edgeKey] = { bendPoints: bendPoints.length > 0 ? bendPoints : undefined };
+      }
+    }
+  }
+
+  return { viewport, nodes, edges };
+}
+
+function walkViewport(ctx: Object_Context, _file: string): GraphLayout['viewport'] {
+  let zoom = 1.0;
+  let panX = 0;
+  let panY = 0;
+  let displayMode = 'just-names';
+
+  const list = ctx.propertyList();
+  if (!list) return { zoom, panX, panY, displayMode };
+  for (const entry of list.propertyEntry()) {
+    const key = entry.key().getText();
+    const val = entry.value();
+    if (!val) continue;
+    if (key === 'zoom' && val.literal()?.NUMBER_LITERAL()) {
+      zoom = Number(val.literal()!.NUMBER_LITERAL()!.getText());
+    } else if (key === 'panX' && val.literal()?.NUMBER_LITERAL()) {
+      panX = Number(val.literal()!.NUMBER_LITERAL()!.getText());
+    } else if (key === 'panY' && val.literal()?.NUMBER_LITERAL()) {
+      panY = Number(val.literal()!.NUMBER_LITERAL()!.getText());
+    } else if (key === 'displayMode') {
+      const idCtx = val.id();
+      if (idCtx) displayMode = idCtx.getText();
+    }
+  }
+
+  return { zoom, panX, panY, displayMode };
 }
 
 function walkDefinition(ctx: DefinitionContext, file: string): Definition {
@@ -421,6 +606,7 @@ function walkTableDef(
   let columns: ColumnDef[] | undefined;
   let indices: IndexDef[] | undefined;
   let constraints: ConstraintDef[] | undefined;
+  let search: SearchBlock | undefined;
 
   for (const p of ctx.tableProperty()) {
     if (p.descriptionProperty()) {
@@ -441,9 +627,12 @@ function walkTableDef(
     if (p.constraintsProperty()) {
       constraints = walkConstraintDefList(p.constraintsProperty()!.constraintDefList()!, file);
     }
+    if (p.searchBlockProperty()) {
+      search = walkSearchBlock(p.searchBlockProperty()!.searchBlock()!, file);
+    }
   }
 
-  return { kind: 'table', name, source, description, tags, primaryKey, columns, indices, constraints };
+  return { kind: 'table', name, source, description, tags, primaryKey, columns, indices, constraints, search };
 }
 
 function walkViewDef(
@@ -456,6 +645,7 @@ function walkViewDef(
   let tags: string[] | undefined;
   let columns: ColumnDef[] | undefined;
   let definitionSql: StringValue | TripleStringValue | undefined;
+  let search: SearchBlock | undefined;
 
   for (const p of ctx.viewProperty()) {
     if (p.descriptionProperty()) {
@@ -470,9 +660,12 @@ function walkViewDef(
     if (p.definitionSqlProperty()) {
       definitionSql = walkStringLiteralForm(p.definitionSqlProperty()!.stringLiteralForm()!, file);
     }
+    if (p.searchBlockProperty()) {
+      search = walkSearchBlock(p.searchBlockProperty()!.searchBlock()!, file);
+    }
   }
 
-  return { kind: 'view', name, source, description, tags, columns, definitionSql };
+  return { kind: 'view', name, source, description, tags, columns, definitionSql, search };
 }
 
 function walkColumnDef(
@@ -486,8 +679,8 @@ function walkColumnDef(
   let type: DataType | undefined;
   let optional: boolean | undefined;
   let isKey: boolean | undefined;
-  let searchable: boolean | undefined;
   let indexed: boolean | undefined;
+  let search: SearchBlock | undefined;
 
   for (const p of ctx.columnProperty()) {
     if (p.descriptionProperty()) {
@@ -505,15 +698,15 @@ function walkColumnDef(
     if (p.isKeyProperty()) {
       isKey = p.isKeyProperty()!.BOOLEAN_LITERAL()!.getText() === 'true';
     }
-    if (p.searchableProperty()) {
-      searchable = p.searchableProperty()!.BOOLEAN_LITERAL()!.getText() === 'true';
-    }
     if (p.indexedProperty()) {
       indexed = p.indexedProperty()!.BOOLEAN_LITERAL()!.getText() === 'true';
     }
+    if (p.searchBlockProperty()) {
+      search = walkSearchBlock(p.searchBlockProperty()!.searchBlock()!, file);
+    }
   }
 
-  return { kind: 'column', name, source, description, tags, type, optional, isKey, searchable, indexed };
+  return { kind: 'column', name, source, description, tags, type, optional, isKey, indexed, search };
 }
 
 function walkIndexDef(
@@ -703,7 +896,6 @@ function walkAttributeDef(
   let type: DataType | undefined;
   let isKey: boolean | undefined;
   let optional: boolean | undefined;
-  let searchable: boolean | undefined;
   let valueLabels: ValueLabels | undefined;
   let displayLabel: LocalizedString | undefined;
   let search: SearchBlock | undefined;
@@ -724,9 +916,6 @@ function walkAttributeDef(
     if (p.optionalProperty()) {
       optional = p.optionalProperty()!.BOOLEAN_LITERAL()!.getText() === 'true';
     }
-    if (p.searchableProperty()) {
-      searchable = p.searchableProperty()!.BOOLEAN_LITERAL()!.getText() === 'true';
-    }
     if (p.valueLabelsProperty()) {
       valueLabels = walkValueLabels(p.valueLabelsProperty()!.valueLabelsBody()!, file);
     }
@@ -738,7 +927,7 @@ function walkAttributeDef(
     }
   }
 
-  return { kind: 'attribute', name, source, description, tags, type, isKey, optional, searchable, valueLabels, displayLabel, search };
+  return { kind: 'attribute', name, source, description, tags, type, isKey, optional, valueLabels, displayLabel, search };
 }
 
 function walkRelationDef(
@@ -753,6 +942,7 @@ function walkRelationDef(
   let to: PropertyValue | undefined;
   let cardinality: ObjectValue | undefined;
   let join: ListValue | undefined;
+  let search: SearchBlock | undefined;
 
   for (const p of ctx.relationProperty()) {
     if (p.descriptionProperty()) {
@@ -773,9 +963,12 @@ function walkRelationDef(
     if (p.joinProperty()?.list()) {
       join = walkList(p.joinProperty()!.list()!, file);
     }
+    if (p.searchBlockProperty()) {
+      search = walkSearchBlock(p.searchBlockProperty()!.searchBlock()!, file);
+    }
   }
 
-  return { kind: 'relation', name, source, description, tags, from, to, cardinality, join };
+  return { kind: 'relation', name, source, description, tags, from, to, cardinality, join, search };
 }
 
 // ============================================================================
@@ -1003,8 +1196,8 @@ function walkColumnDefList(ctx: ColumnDefListContext, file: string): ColumnDef[]
     let type: DataType | undefined;
     let optional: boolean | undefined;
     let isKey: boolean | undefined;
-    let searchable: boolean | undefined;
     let indexed: boolean | undefined;
+    let search: SearchBlock | undefined;
 
     for (const p of inlineCtx.columnProperty()) {
       if (p.descriptionProperty()) {
@@ -1022,15 +1215,15 @@ function walkColumnDefList(ctx: ColumnDefListContext, file: string): ColumnDef[]
       if (p.isKeyProperty()) {
         isKey = p.isKeyProperty()!.BOOLEAN_LITERAL()!.getText() === 'true';
       }
-      if (p.searchableProperty()) {
-        searchable = p.searchableProperty()!.BOOLEAN_LITERAL()!.getText() === 'true';
-      }
       if (p.indexedProperty()) {
         indexed = p.indexedProperty()!.BOOLEAN_LITERAL()!.getText() === 'true';
       }
+      if (p.searchBlockProperty()) {
+        search = walkSearchBlock(p.searchBlockProperty()!.searchBlock()!, file);
+      }
     }
 
-    result.push({ kind: 'column', name, source: makeSourceLocation(inline, file), description, tags, type, optional, isKey, searchable, indexed });
+    result.push({ kind: 'column', name, source: makeSourceLocation(inline, file), description, tags, type, optional, isKey, indexed, search });
   }
   return result;
 }
@@ -1107,7 +1300,6 @@ function walkAttributeDefList(ctx: AttributeDefListContext, file: string): Attri
     let type: DataType | undefined;
     let isKey: boolean | undefined;
     let optional: boolean | undefined;
-    let searchable: boolean | undefined;
     let valueLabels: ValueLabels | undefined;
     let displayLabel: LocalizedString | undefined;
     let search: SearchBlock | undefined;
@@ -1128,9 +1320,6 @@ function walkAttributeDefList(ctx: AttributeDefListContext, file: string): Attri
       if (p.optionalProperty()) {
         optional = p.optionalProperty()!.BOOLEAN_LITERAL()!.getText() === 'true';
       }
-      if (p.searchableProperty()) {
-        searchable = p.searchableProperty()!.BOOLEAN_LITERAL()!.getText() === 'true';
-      }
       if (p.valueLabelsProperty()) {
         valueLabels = walkValueLabels(p.valueLabelsProperty()!.valueLabelsBody()!, file);
       }
@@ -1142,7 +1331,7 @@ function walkAttributeDefList(ctx: AttributeDefListContext, file: string): Attri
       }
     }
 
-    result.push({ kind: 'attribute', name, source: makeSourceLocation(inline, file), description, tags, type, isKey, optional, searchable, valueLabels, displayLabel, search });
+    result.push({ kind: 'attribute', name, source: makeSourceLocation(inline, file), description, tags, type, isKey, optional, valueLabels, displayLabel, search });
   }
   return result;
 }
@@ -1245,26 +1434,44 @@ function walkSearchBlock(ctx: SearchBlockContext, file: string): SearchBlock {
   let descriptions: LocalizedStringList | undefined;
   let examples: string[] | undefined;
   let aliases: string[] | undefined;
+  let searchable: boolean | undefined;
+  let fuzzy: boolean | undefined;
+  const seen = new Map<string, number>();
+  const bump = (k: string) => seen.set(k, (seen.get(k) ?? 0) + 1);
 
   for (const p of ctx.searchSubProperty()) {
     if (p.keywordsProperty()) {
+      bump('keywords');
       keywords = walkLocalizedStringList(p.keywordsProperty()!.localizedStringList()!, file);
     }
     if (p.patternsProperty()) {
+      bump('patterns');
       patterns = walkListOfStrings(p.patternsProperty()!.listOfStrings()!, file);
     }
     if (p.descriptionsProperty()) {
+      bump('descriptions');
       descriptions = walkLocalizedStringList(p.descriptionsProperty()!.localizedStringList()!, file);
     }
     if (p.examplesProperty()) {
+      bump('examples');
       examples = walkListOfStrings(p.examplesProperty()!.listOfStrings()!, file);
     }
     if (p.aliasesProperty()) {
+      bump('aliases');
       aliases = walkListOfStrings(p.aliasesProperty()!.listOfStrings()!, file);
+    }
+    if (p.searchableProperty()) {
+      bump('searchable');
+      searchable = p.searchableProperty()!.BOOLEAN_LITERAL()!.getText() === 'true';
+    }
+    if (p.fuzzyProperty()) {
+      bump('fuzzy');
+      fuzzy = p.fuzzyProperty()!.BOOLEAN_LITERAL()!.getText() === 'true';
     }
   }
 
-  return { kind: 'searchBlock', keywords, patterns, descriptions, examples, aliases, source: makeSourceLocation(ctx, file) };
+  const duplicateProperties = [...seen.entries()].filter(([, n]) => n > 1).map(([k]) => k);
+  return { kind: 'searchBlock', keywords, patterns, descriptions, examples, aliases, searchable, fuzzy, duplicateProperties, source: makeSourceLocation(ctx, file) };
 }
 
 function walkValueLabels(ctx: ValueLabelsBodyContext, file: string): ValueLabels {

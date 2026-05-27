@@ -1,51 +1,25 @@
 import { describe, it, expect } from 'vitest';
 import { buildLayout, applyPositions, type CyShim } from '../save-layout';
+import type { ViewportState } from '@modeler/lsp';
 
 describe('layout-round-trip', () => {
   describe('buildLayout', () => {
-    it('preserves inactive schema viewport (F-1 regression)', () => {
-      const viewports = {
-        db: { zoom: 2.0, panX: 100, panY: 200, displayMode: 'with-types' as const },
-        er: { zoom: 1.0, panX: 0, panY: 0, displayMode: 'just-names' as const },
-      };
+    it('returns current viewport with updated zoom/pan', () => {
       const mockCy: CyShim = {
         nodes: () => [],
-        pan: () => ({ x: 0, y: 0 }),
-        zoom: () => 3.0,
+        pan: () => ({ x: 50, y: -20 }),
+        zoom: () => 1.5,
       };
 
-      const result = buildLayout(mockCy, viewports, 'er', 'just-names');
+      const result = buildLayout(mockCy, null, 'just-names');
 
-      expect(result.viewports.db.zoom).toBe(2.0);
-      expect(result.viewports.db.panX).toBe(100);
-      expect(result.viewports.db.panY).toBe(200);
-      expect(result.viewports.db.displayMode).toBe('with-types');
-      expect(result.viewports.er.zoom).toBe(3.0);
-      expect(result.viewports.er.displayMode).toBe('just-names');
-    });
-
-    it('includes current displayMode for active schema (F-2 regression)', () => {
-      const viewports = {
-        db: { zoom: 1, panX: 0, panY: 0, displayMode: 'with-types' as const },
-        er: { zoom: 1, panX: 0, panY: 0, displayMode: 'just-names' as const },
-      };
-      const mockCy: CyShim = {
-        nodes: () => [],
-        pan: () => ({ x: 0, y: 0 }),
-        zoom: () => 1,
-      };
-
-      const result = buildLayout(mockCy, viewports, 'db', 'with-constraints');
-
-      expect(result.viewports.db.displayMode).toBe('with-constraints');
-      expect(result.viewports.er.displayMode).toBe('just-names');
+      expect(result.viewport.zoom).toBe(1.5);
+      expect(result.viewport.panX).toBe(50);
+      expect(result.viewport.panY).toBe(-20);
+      expect(result.viewport.displayMode).toBe('just-names');
     });
 
     it('maps every cy node qname to its position', () => {
-      const viewports = {
-        db: { zoom: 1, panX: 0, panY: 0, displayMode: 'with-types' as const },
-        er: { zoom: 1, panX: 0, panY: 0, displayMode: 'just-names' as const },
-      };
       const mockNode1 = { position: () => ({ x: 10, y: 20 }), data: (_k: string) => 'er.entity.artikl' };
       const mockNode2 = { position: () => ({ x: 30, y: 40 }), data: (_k: string) => 'er.entity.other' };
       const mockCy: CyShim = {
@@ -54,10 +28,23 @@ describe('layout-round-trip', () => {
         zoom: () => 1,
       };
 
-      const result = buildLayout(mockCy, viewports, 'er', 'just-names');
+      const result = buildLayout(mockCy, null, 'just-names');
 
       expect(result.nodes['er.entity.artikl']).toEqual({ x: 10, y: 20 });
       expect(result.nodes['er.entity.other']).toEqual({ x: 30, y: 40 });
+    });
+
+    it('uses currentViewport displayMode when displayMode arg is not provided', () => {
+      const mockCy: CyShim = {
+        nodes: () => [],
+        pan: () => ({ x: 0, y: 0 }),
+        zoom: () => 1,
+      };
+      const existingViewport: ViewportState = { zoom: 1, panX: 0, panY: 0, displayMode: 'with-types' };
+
+      const result = buildLayout(mockCy, existingViewport, 'just-names');
+
+      expect(result.viewport.displayMode).toBe('just-names');
     });
   });
 

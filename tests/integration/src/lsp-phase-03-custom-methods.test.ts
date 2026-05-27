@@ -69,76 +69,60 @@ describe('Phase 3 custom LSP methods', () => {
     const emptyRoot = join(tmpdir(), `modeler-test-empty-${Date.now()}`);
     const result = await client.sendRequest('modeler/getLayout', { projectRoot: emptyRoot }) as {
       version: number;
-      viewports: unknown;
       nodes: unknown;
       edges: unknown;
     };
     expect(result.version).toBe(1);
-    expect(result.viewports).toHaveProperty('db');
-    expect(result.viewports).toHaveProperty('er');
+    expect(result).toHaveProperty('nodes');
+    expect(result).toHaveProperty('edges');
   });
 
-  it('4.2 setLayout then getLayout round-trips the same LayoutFile', async () => {
-    const tempRoot = join(tmpdir(), `modeler-test-layout-${Date.now()}`);
-    mkdirSync(tempRoot, { recursive: true });
+  it('4.2 setLayout via graphUri then getLayout round-trips the same LayoutFile', async () => {
+    const graphPath = join(tmpdir(), `modeler-test-layout-${Date.now()}.ttrg`);
+    let graphContent = `graph test { schema: er, objects: [] }`;
+    writeFileSync(graphPath, graphContent, 'utf-8');
+
+    const uri = `file://${graphPath}`;
+    client.sendNotification('textDocument/didOpen', {
+      textDocument: { uri, languageId: 'ttr', version: 1, text: graphContent },
+    });
+    await sleep(50);
+
     try {
       const layoutPayload = {
         version: 1 as const,
-        viewports: {
-          db: { zoom: 1.5, panX: 10, panY: 20, displayMode: 'with-types' as const },
-          er: { zoom: 2.0, panX: 0, panY: 0, displayMode: 'just-names' as const },
-        },
-        nodes: { 'db.dbo.foo': { x: 100, y: 200 } },
-        edges: { 'db.dbo.rel1': { bendPoints: [[150, 250] as [number, number]] } },
+        viewport: { zoom: 2.0, panX: 0, panY: 0, displayMode: 'just-names' as const },
+        nodes: { 'er.entity.artikl': { x: 100, y: 200 } },
+        edges: {} as Record<string, { bendPoints: [number, number][] }>,
       };
       const setResult = await client.sendRequest('modeler/setLayout', {
-        projectRoot: tempRoot,
+        graphUri: uri,
         layout: layoutPayload,
-      }) as { ok: boolean };
-      expect(setResult.ok).toBe(true);
+      }) as { documentChanges?: any[] };
+      expect(setResult.documentChanges).toBeDefined();
+      expect(setResult.documentChanges!.length).toBeGreaterThan(0);
 
-      const getResult = await client.sendRequest('modeler/getLayout', {
-        projectRoot: tempRoot,
-      }) as typeof layoutPayload;
+      for (let i = setResult.documentChanges!.length - 1; i >= 0; i--) {
+        const change = setResult.documentChanges![i];
+        const start = change.edits[0].range.start;
+        const end = change.edits[0].range.end;
+        const lines = graphContent.split('\n');
+        const before = lines.slice(0, start.line).join('\n') + '\n' + lines[start.line].slice(0, start.character);
+        const after = (end.line > start.line ? '' : lines[start.line].slice(end.character)) + '\n' + lines.slice(end.line + 1).join('\n');
+        graphContent = before + change.edits[0].newText + after;
+      }
+      client.sendNotification('textDocument/didChange', {
+        textDocument: { uri, version: 2 },
+        contentChanges: [{ text: graphContent }],
+      });
+      await sleep(50);
+
+      const getResult = await client.sendRequest('modeler/getLayout', { graphUri: uri }) as typeof layoutPayload;
       expect(getResult.version).toBe(1);
-      expect(getResult.viewports.db.zoom).toBe(1.5);
-      expect(getResult.viewports.db.panX).toBe(10);
-      expect(getResult.nodes['db.dbo.foo']).toEqual({ x: 100, y: 200 });
-      expect(getResult.edges['db.dbo.rel1']).toEqual({ bendPoints: [[150, 250]] });
+      expect(getResult.viewport?.zoom).toBe(2.0);
+      expect(getResult.nodes['er.entity.artikl']).toEqual({ x: 100, y: 200 });
     } finally {
-      rmSync(tempRoot, { recursive: true, force: true });
-    }
-  });
-
-  it('4.2b getLayout returns emptyLayout when .ttrl is malformed JSON', async () => {
-    const tempRoot = join(tmpdir(), `modeler-test-malformed-${Date.now()}`);
-    mkdirSync(join(tempRoot, '.modeler'), { recursive: true });
-    try {
-      writeFileSync(join(tempRoot, '.modeler', 'layout.ttrl'), 'not json {{{', 'utf-8');
-      const result = await client.sendRequest('modeler/getLayout', { projectRoot: tempRoot }) as {
-        version: number;
-        nodes: Record<string, unknown>;
-      };
-      expect(result.version).toBe(1);
-      expect(result.nodes).toEqual({});
-    } finally {
-      rmSync(tempRoot, { recursive: true, force: true });
-    }
-  });
-
-  it('4.2c getLayout returns emptyLayout when .ttrl has wrong schema version', async () => {
-    const tempRoot = join(tmpdir(), `modeler-test-wrongversion-${Date.now()}`);
-    mkdirSync(join(tempRoot, '.modeler'), { recursive: true });
-    try {
-      writeFileSync(join(tempRoot, '.modeler', 'layout.ttrl'), JSON.stringify({ version: 2, viewports: {}, nodes: {}, edges: {} }), 'utf-8');
-      const result = await client.sendRequest('modeler/getLayout', { projectRoot: tempRoot }) as {
-        version: number;
-        nodes: Record<string, unknown>;
-      };
-      expect(result.version).toBe(1);
-      expect(result.nodes).toEqual({});
-    } finally {
-      rmSync(tempRoot, { recursive: true, force: true });
+      rmSync(graphPath, { recursive: true, force: true });
     }
   });
 
@@ -151,7 +135,7 @@ describe('Phase 3 custom LSP methods', () => {
   });
 
   it('4.4 getSymbolDetail for er.entity.artikl returns Czech label, description, perKindData, referencedBy', async () => {
-    const ttrFiles = await getAllTtrFiles(samplesDir, ['broken', 'v1-mini']);
+    const ttrFiles = await getAllTtrFiles(samplesDir, ['broken', 'v1-mini', 'v1.1-mini', 'v1.1-metadata', 'v1.1-mini-migrated']);
     for (const file of ttrFiles) {
       const content = await import('fs/promises').then(fs => fs.readFile(file, 'utf-8'));
       client.sendNotification('textDocument/didOpen', {
@@ -184,7 +168,7 @@ describe('Phase 3 custom LSP methods', () => {
   }, 10000);
 
   it('4.5 getModelGraph with schema db on multi-file project returns >= 5 edges', async () => {
-    const ttrFiles = await getAllTtrFiles(samplesDir, ['broken', 'v1-mini']);
+    const ttrFiles = await getAllTtrFiles(samplesDir, ['broken', 'v1-mini', 'v1.1-mini', 'v1.1-metadata', 'v1.1-mini-migrated']);
     for (const file of ttrFiles) {
       const content = await import('fs/promises').then(fs => fs.readFile(file, 'utf-8'));
       client.sendNotification('textDocument/didOpen', {
@@ -218,7 +202,7 @@ describe('Phase 3 custom LSP methods', () => {
   }, 10000);
 
   it('4.5b getModelGraph with schema er returns relation edges with from/toCardinality and localized entity labels', async () => {
-    const ttrFiles = await getAllTtrFiles(samplesDir, ['broken', 'v1-mini']);
+    const ttrFiles = await getAllTtrFiles(samplesDir, ['broken', 'v1-mini', 'v1.1-mini', 'v1.1-metadata', 'v1.1-mini-migrated']);
     for (const file of ttrFiles) {
       const content = await import('fs/promises').then(fs => fs.readFile(file, 'utf-8'));
       client.sendNotification('textDocument/didOpen', {
@@ -281,7 +265,7 @@ describe('Phase 3 custom LSP methods', () => {
   }, 10000);
 
   it('4.6 getSymbolDetail for a column qname returns null in v1 (nested-qname limitation)', async () => {
-    const ttrFiles = await getAllTtrFiles(samplesDir, ['broken', 'v1-mini']);
+    const ttrFiles = await getAllTtrFiles(samplesDir, ['broken', 'v1-mini', 'v1.1-mini', 'v1.1-metadata', 'v1.1-mini-migrated']);
     for (const file of ttrFiles) {
       const content = await import('fs/promises').then(fs => fs.readFile(file, 'utf-8'));
       client.sendNotification('textDocument/didOpen', {

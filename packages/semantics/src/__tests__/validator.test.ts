@@ -124,3 +124,66 @@ describe('Validator.validateProject', () => {
     expect(diags.filter((d) => d.code === DiagnosticCode.DuplicateDefinition).length).toBeGreaterThanOrEqual(2);
   });
 });
+
+describe('search block validation', () => {
+  function searchSetup(src: string) {
+    const uri = 'test.ttr';
+    const ast = parseString(src, uri).ast!;
+    const schemaCode = ast.schemaDirective?.schemaCode ?? 'db';
+    const namespace = ast.schemaDirective?.namespace ?? '';
+    const symbols = new ProjectSymbolTable();
+    symbols.upsertDocument(uri, ast, schemaCode, namespace);
+    const resolver = new Resolver(symbols);
+    const manifest = resolveManifest(undefined, '');
+    const validator = new Validator(symbols, resolver, manifest);
+    return { validator, ast, symbols, resolver };
+  }
+
+  it('emits FuzzyWithoutSearchable warning when fuzzy: true but searchable absent', () => {
+    const { validator, ast } = searchSetup(
+      'def entity E { attributes: [def attribute A { type: text, search { fuzzy: true } }] }'
+    );
+    const diags = validator.validateDocument('test.ttr', ast);
+    expect(diags.some((d) => d.code === DiagnosticCode.FuzzyWithoutSearchable && d.severity === 'warning')).toBe(true);
+  });
+
+  it('emits no FuzzyWithoutSearchable when searchable: true and fuzzy: true', () => {
+    const { validator, ast } = searchSetup(
+      'def entity E { search { searchable: true, fuzzy: true } }'
+    );
+    const diags = validator.validateDocument('test.ttr', ast);
+    expect(diags.some((d) => d.code === DiagnosticCode.FuzzyWithoutSearchable)).toBe(false);
+  });
+
+  it('emits FuzzyWithoutSearchable warning when searchable: false and fuzzy: true', () => {
+    const { validator, ast } = searchSetup(
+      'def entity E { search { searchable: false, fuzzy: true } }'
+    );
+    const diags = validator.validateDocument('test.ttr', ast);
+    expect(diags.some((d) => d.code === DiagnosticCode.FuzzyWithoutSearchable && d.severity === 'warning')).toBe(true);
+  });
+
+  it('emits DuplicateSearchProperty error when keywords appears twice', () => {
+    const { validator, ast } = searchSetup(
+      'def entity E { search { keywords: { cs: ["a"] }, keywords: { en: ["b"] } } }'
+    );
+    const diags = validator.validateDocument('test.ttr', ast);
+    expect(diags.some((d) => d.code === DiagnosticCode.DuplicateSearchProperty && d.severity === 'error')).toBe(true);
+  });
+
+  it('emits no new diagnostics on a clean search block on table', () => {
+    const { validator, ast } = searchSetup(
+      'def table T { search { searchable: true, fuzzy: true } }'
+    );
+    const diags = validator.validateDocument('test.ttr', ast);
+    expect(diags.some((d) => d.code === DiagnosticCode.FuzzyWithoutSearchable || d.code === DiagnosticCode.DuplicateSearchProperty)).toBe(false);
+  });
+
+  it('emits no new diagnostics on a clean search block on column', () => {
+    const { validator, ast } = searchSetup(
+      'def table T { columns: [def column C { type: varchar, search { searchable: true } }] }'
+    );
+    const diags = validator.validateDocument('test.ttr', ast);
+    expect(diags.some((d) => d.code === DiagnosticCode.FuzzyWithoutSearchable || d.code === DiagnosticCode.DuplicateSearchProperty)).toBe(false);
+  });
+});

@@ -31,6 +31,17 @@ Adds a vendoring header comment with the commit hash.
 
 Compares local and remote grammar files by hash. Exits non-zero if they differ.
 
+## Versioning
+
+The TTR grammar uses an `X.Y` scheme:
+
+- **X** — breaking change (new required syntax, removed/renamed constructs, anything that breaks previously-valid `.ttr` files).
+- **Y** — additive change (new optional constructs, syntactic sugar, parser bug fixes).
+
+The canonical version is the `// @grammar-version: X.Y` marker in the header of `src/TTR.g4`. The `prebuild` script extracts it into `src/generated/version.ts`, which is re-exported from this package as `TTR_GRAMMAR_VERSION` for runtime use (LSP status, tests, ai-platform compatibility checks).
+
+To bump the version: edit the marker in `TTR.g4`, add an entry to `CHANGELOG.md`, and run `pnpm --filter @modeler/grammar build` (the prebuild hook regenerates `version.ts`). The marker is part of the file body, so `sync-to-ai-platform.sh` propagates it to the Kotlin side unchanged.
+
 ## Policy
 
 The grammar file lives here (canonical source). Any changes to the grammar must be made here and then propagated via `sync-to-ai-platform.sh` to ai-platform.
