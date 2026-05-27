@@ -1,7 +1,15 @@
 // =============================================================================
-// TTR (Tatrman) v2 grammar — v1.1 promotion: packages, imports, graph blocks
+// TTR (Tatrman) grammar
 //
-// Changes vs v1:
+// @grammar-version: 2.0
+//
+// Version scheme: X.Y — X is a breaking/major change, Y is additive
+// (syntactic sugar, new optional constructs, bug fixes). Bump the marker
+// above when changing the grammar; the prebuild script extracts it into
+// @modeler/grammar's exported TTR_GRAMMAR_VERSION. See CHANGELOG.md for
+// history.
+//
+// Changes vs v1 (promoted to 2.0 with v1.1 work):
 //   1. New top-level constructs: `package <qualifiedName>`, `import <qualifiedName>[]`,
 //      `graph <id> { ... }`.
 //   2. New lexer tokens: PACKAGE, IMPORT, GRAPH, OBJECTS, LAYOUT, STAR.
