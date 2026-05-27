@@ -239,6 +239,12 @@ mappingColumnEntry
 
 mappingColumnValue
     : id
+    | LBRACE TARGET propSep? mappingTargetValue RBRACE
+    | object_
+    ;
+
+mappingTargetValue
+    : id
     | object_
     ;
 

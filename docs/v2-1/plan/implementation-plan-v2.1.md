@@ -58,7 +58,7 @@ v2.1 is organised into eight sections (A–H). Sections A–F are modeler-only; 
 - `pnpm --filter @modeler/grammar build` clean.
 - `pnpm --filter @modeler/parser build` clean (the generated TS parser regenerates without errors).
 - Every existing v1.1 sample (`samples/v1.1-mini`, `samples/v1.1-metadata`) parses unchanged.
-- `samples/2.1/er.ttr` (the user's sketch, even if semantically not yet implemented) parses without grammar errors.
+- `samples/2.1/er.ttr` (the user's raw sketch) is expected to still produce parse errors at Section B (it uses pre-design forms — `attributes:` not `columns:`, standalone `def mapping`, unbalanced braces); the parser must return `ttr/parse-error` diagnostics and not throw. Section F rewrites it to parse cleanly.
 
 **Notes:** this is grammar-only. The synthesizer in Section D is what gives the new shapes their meaning. Sections B and C produce a parser that *recognises* but doesn't yet *understand* inline mappings.
 

@@ -29,7 +29,7 @@ Workspace uses pnpm 11 (see `packageManager`). Node 20+ required.
 
 1. `cd packages/parser && pnpm run prebuild` — regenerates `packages/parser/src/generated/*` via `antlr-ng` (script: `packages/grammar/scripts/generate-typescript-parser.sh`). The `prebuild` hook runs automatically before `pnpm --filter @modeler/parser build`.
 2. `cd packages/vscode-ext && node scripts/generate-tm-grammar.ts` — regenerates the TextMate grammar used by the VS Code extension for syntax highlighting.
-3. Commit the generated files alongside the grammar change.
+3. Commit the grammar change. `packages/grammar/src/generated/` and `packages/parser/src/generated/` are **gitignored** — they are regenerated at build time from `TTR.g4`. Only `TTR.g4`, the generation scripts, and `packages/vscode-ext/syntaxes/ttr.tmLanguage.json` are committed.
 
 The grammar is also vendored into the `ai-platform` repo. `packages/grammar/scripts/sync-to-ai-platform.sh <ai-platform-path>` copies it; `check-sync.sh <ai-platform-path>` verifies hashes match. ai-platform's Kotlin parser regenerates from its vendored copy.
 

@@ -18,6 +18,14 @@ All line numbers below are as of the planning snapshot — confirm by reading th
 
 ---
 
+## F.WIP — Remove the `samples/2.1/` exclusion guard (review-059 B2)
+
+`parser.test.ts` and `integration.test.ts` have a temporary `'2.1'` exclusion on `getAllTtrFiles(samplesDir, ['broken', '2.1'])` because the sketch is pre-design and not yet parseable. Remove it once `samples/2.1/er.ttr` has been rewritten and parses cleanly.
+
+- [ ] Remove `'2.1'` from `packages/parser/src/__tests__/parser.test.ts` line ~94.
+- [ ] Remove `'2.1'` from `tests/integration/src/integration.test.ts` lines ~126 and ~225.
+- [ ] Confirm `pnpm -r test` is still green after removal.
+
 ## Tasks
 
 ### F.0 — Add `modeler.toml` if missing
