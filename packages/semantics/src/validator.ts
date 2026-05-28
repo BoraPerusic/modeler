@@ -208,6 +208,14 @@ export class Validator {
     const diagnostics: ValidationDiagnostic[] = [];
 
     for (const dup of this.symbols.duplicates()) {
+      const hasInline = dup.entries.some((e) => e.mappingSource === 'inline');
+      if (hasInline) {
+        const isEr2db =
+          dup.entries[0].kind === 'er2dbEntity' ||
+          dup.entries[0].kind === 'er2dbAttribute' ||
+          dup.entries[0].kind === 'er2dbRelation';
+        if (isEr2db) continue;
+      }
       for (const entry of dup.entries) {
         const others = dup.entries
           .filter((e) => !(e.documentUri === entry.documentUri && e.source.line === entry.source.line))
@@ -218,6 +226,36 @@ export class Validator {
           severity: 'error',
           message: `Duplicate definition of '${dup.qname}' (also at ${others})`,
           source: entry.source,
+        });
+      }
+    }
+
+    diagnostics.push(...this.validateDuplicateMappings());
+
+    return diagnostics;
+  }
+
+  private validateDuplicateMappings(): ValidationDiagnostic[] {
+    const diagnostics: ValidationDiagnostic[] = [];
+
+    for (const qname of this.symbols.allQnames()) {
+      const entries = this.symbols.getAll(qname);
+      if (entries.length < 2) continue;
+      const firstKind = entries[0].kind;
+      const isEr2db =
+        firstKind === 'er2dbEntity' ||
+        firstKind === 'er2dbAttribute' ||
+        firstKind === 'er2dbRelation';
+      if (!isEr2db) continue;
+      const sources = new Set(entries.map((e) => e.mappingSource ?? 'explicit'));
+      if (!sources.has('inline')) continue;
+      const otherLocations = entries.map((e) => `${e.documentUri}:${e.source.line}`).join(', ');
+      for (const e of entries) {
+        diagnostics.push({
+          code: DiagnosticCode.DuplicateMapping,
+          severity: 'error',
+          message: `Duplicate mapping for "${qname}" — declared in ${entries.length} places: ${otherLocations}`,
+          source: e.source,
         });
       }
     }

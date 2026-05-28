@@ -24,6 +24,7 @@ export enum DiagnosticCode {
   FileOrdering = 'ttr/file-ordering',
   FuzzyWithoutSearchable = 'ttr/fuzzy-without-searchable',
   DuplicateSearchProperty = 'ttr/duplicate-search-property',
+  DuplicateMapping = 'ttr/duplicate-mapping',
 }
 
 export enum DiagnosticSeverity {

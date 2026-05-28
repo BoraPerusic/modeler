@@ -81,6 +81,14 @@ export class ProjectSymbolTable {
     return this.byQname.get(qname)?.[0];
   }
 
+  allQnames(): string[] {
+    return [...this.byQname.keys()];
+  }
+
+  getAll(qname: string): SymbolEntry[] {
+    return this.byQname.get(qname) ?? [];
+  }
+
   all(): SymbolEntry[] {
     const result: SymbolEntry[] = [];
     const seen = new Set<string>();
