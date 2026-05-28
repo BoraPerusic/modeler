@@ -121,6 +121,41 @@ describe('ttr/duplicate-mapping — attribute', () => {
     const dup = diags.filter((d: ValidationDiagnostic) => d.code === DiagnosticCode.DuplicateMapping);
     expect(dup.length).toBeGreaterThanOrEqual(2);
   });
+
+  it('only inline attribute (no explicit) → no duplicate-mapping diagnostic', () => {
+    const diags = buildAndValidate({
+      'er.ttr': `
+        package p
+        schema er
+        def entity foo {
+          attributes: [
+            def attribute id { type: int, isKey: true, mapping: IDX }
+          ]
+        }
+      `,
+    });
+    expect(diags.filter((d: ValidationDiagnostic) => d.code === DiagnosticCode.DuplicateMapping)).toHaveLength(0);
+  });
+
+  it('only explicit er2db_attribute (no inline) → no duplicate-mapping diagnostic', () => {
+    const diags = buildAndValidate({
+      'er.ttr': `
+        package p
+        schema er
+        def entity foo {
+          attributes: [
+            def attribute id { type: int, isKey: true }
+          ]
+        }
+      `,
+      'map.ttr': `
+        package p
+        schema map
+        def er2db_attribute foo.id { attribute: er.entity.foo.id, target: { column: db.dbo.QZBOZI_DF.IDX } }
+      `,
+    });
+    expect(diags.filter((d: ValidationDiagnostic) => d.code === DiagnosticCode.DuplicateMapping)).toHaveLength(0);
+  });
 });
 
 describe('ttr/duplicate-mapping — relation', () => {
@@ -144,5 +179,41 @@ describe('ttr/duplicate-mapping — relation', () => {
     });
     const dup = diags.filter((d: ValidationDiagnostic) => d.code === DiagnosticCode.DuplicateMapping);
     expect(dup).toHaveLength(2);
+  });
+
+  it('only inline relation (no explicit) → no duplicate-mapping diagnostic', () => {
+    const diags = buildAndValidate({
+      'er.ttr': `
+        package p
+        schema er
+        def relation r {
+          from: er.entity.a, to: er.entity.b,
+          cardinality: { from: "0..*", to: "1" },
+          join: [{ from: er.entity.a.x, to: er.entity.b.x }],
+          mapping: db.dbo.fk_a_b
+        }
+      `,
+    });
+    expect(diags.filter((d: ValidationDiagnostic) => d.code === DiagnosticCode.DuplicateMapping)).toHaveLength(0);
+  });
+
+  it('only explicit er2db_relation (no inline) → no duplicate-mapping diagnostic', () => {
+    const diags = buildAndValidate({
+      'er.ttr': `
+        package p
+        schema er
+        def relation r {
+          from: er.entity.a, to: er.entity.b,
+          cardinality: { from: "0..*", to: "1" },
+          join: [{ from: er.entity.a.x, to: er.entity.b.x }]
+        }
+      `,
+      'map.ttr': `
+        package p
+        schema map
+        def er2db_relation r { relation: er.entity.r, fk: db.dbo.fk_a_b }
+      `,
+    });
+    expect(diags.filter((d: ValidationDiagnostic) => d.code === DiagnosticCode.DuplicateMapping)).toHaveLength(0);
   });
 });

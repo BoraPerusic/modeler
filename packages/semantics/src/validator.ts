@@ -249,12 +249,15 @@ export class Validator {
       if (!isEr2db) continue;
       const sources = new Set(entries.map((e) => e.mappingSource ?? 'explicit'));
       if (!sources.has('inline')) continue;
-      const otherLocations = entries.map((e) => `${e.documentUri}:${e.source.line}`).join(', ');
       for (const e of entries) {
+        const others = entries
+          .filter((other) => !(other.documentUri === e.documentUri && other.source.line === e.source.line))
+          .map((o) => `${o.documentUri}:${o.source.line}`)
+          .join(', ');
         diagnostics.push({
           code: DiagnosticCode.DuplicateMapping,
           severity: 'error',
-          message: `Duplicate mapping for "${qname}" — declared in ${entries.length} places: ${otherLocations}`,
+          message: `Duplicate mapping for "${qname}" — declared in ${entries.length} places: ${others}`,
           source: e.source,
         });
       }

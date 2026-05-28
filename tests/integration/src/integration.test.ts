@@ -190,7 +190,14 @@ describe('parser integration', () => {
     // N/A fixtures: documented in samples/broken/v1.1/README.md as not emittable
     // under the order-strict grammar (file-ordering). graph-layout-stale-node is now
     // fixed (unquoted keys) and covered above.
-it.skip('file-ordering.ttr — N/A (order-strict grammar; see README)', () => {});
+    it.skip('file-ordering.ttr — N/A (order-strict grammar; see README)', () => {});
+  });
+
+  it('parses all sample files (non-broken) without errors', async () => {
+    for (const file of sampleFiles) {
+      const result = await parseFile(file);
+      expect(result.errors, `Errors in ${file}: ${result.errors.map(e => e.message).join(', ')}`).toHaveLength(0);
+    }
   });
 
   describe('v2.1 inline-mapping broken fixture diagnostics', () => {
@@ -212,6 +219,7 @@ it.skip('file-ordering.ttr — N/A (order-strict grammar; see README)', () => {}
         const cases: Array<[string, string[]]> = [
           ['er.ttr', ['ttr/duplicate-mapping']],
           ['map.ttr', ['ttr/duplicate-mapping']],
+          ['db.ttr', []],
         ];
 
         for (const [file, expected] of cases) {
@@ -242,12 +250,10 @@ it.skip('file-ordering.ttr — N/A (order-strict grammar; see README)', () => {}
 });
 
 describe('lsp integration', () => {
-  let sampleFiles: string[];
   let clientConnection: lsp.Connection;
   let serverConnection: lsp.Connection;
 
   beforeAll(async () => {
-    sampleFiles = await getAllTtrFiles(samplesDir, ['broken', '2.1']); // 2.1 sketch is WIP until Section F (review-059 B2)
     const { client, server } = createPairedConnection();
     clientConnection = client;
     serverConnection = server;
