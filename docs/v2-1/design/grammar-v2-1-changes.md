@@ -197,8 +197,8 @@ def entity artikl { ..., mapping: { target: { table: db.dbo.QZBOZI_DF }, columns
 
 Synthesizes:
 
-- `billing.products.map.er2db_entity.artikl` → `{ table: billing.products.db.dbo.QZBOZI_DF }`
-- `billing.products.map.er2db_attribute.artikl.id_artiklu` → `{ column: billing.products.db.dbo.QZBOZI_DF.IDZBOZI }`
+- `billing.products.map.er2dbEntity.artikl` → `{ table: billing.products.db.dbo.QZBOZI_DF }`
+- `billing.products.map.er2dbAttribute.artikl.id_artiklu` → `{ column: billing.products.db.dbo.QZBOZI_DF.IDZBOZI }`
 
 The `map` schema prefix is part of the qname (matching how explicit `def er2db_*` symbols are named today) but the symbols themselves are *not* attached to the `map` per-file symbol table — they live in the project-level semantic table only. See §4.4.
 

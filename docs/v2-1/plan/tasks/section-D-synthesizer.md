@@ -139,7 +139,7 @@ All line numbers below are as of the planning snapshot — confirm by reading th
   ```
   Expect every test to error out because `synthesizeMappings` doesn't exist yet.
 
-**Status: DONE.** Tests written and passing (see commit `05b0748`).
+**Status: DONE.** Tests written and passing (see commit `6c0903a`).
 
 ### D.1 — Extend `SymbolEntry` with mapping source
 
@@ -424,12 +424,12 @@ The trick: synthesized entries live in `byQname` (the project-wide index) but ar
 
 ## Verification
 
-- [ ] `mapping-synthesizer.test.ts` passes.
-- [ ] `pnpm --filter @modeler/semantics typecheck` clean.
-- [ ] **Round-trip check.** Author a small project with one `er.ttr` using all four inline forms; load via the LSP test harness; assert the project symbol table contains the synthesized symbols at the expected qnames.
-- [ ] **No leakage into `map`-schema document tables.** For a project containing inline mappings but no `map.ttr`, `byDocument(uri)` returns no `er2db_*` entries for any URI. Only the project-wide `byQname` index has them.
-- [ ] **`workspace/symbol` finds synthesized symbols.** With the LSP integration test harness, send `workspace/symbol` with query `er2db_entity` and assert synthesized entries appear.
-- [ ] **`textDocument/references` on a target column** (e.g. `db.dbo.QZBOZI_DF.IDZBOZI`) includes the synthesized symbol's source location. This validates Cmd-click reverse navigation.
+- [x] `mapping-synthesizer.test.ts` passes.
+- [x] `pnpm --filter @modeler/semantics typecheck` clean.
+- [ ] **Round-trip check** *(deferred to Section F — requires LSP integration harness).*
+- [ ] **No leakage into `map`-schema document tables** *(deferred to Section F integration test — `byDocument(uri)` assertion).*
+- [ ] **`workspace/symbol` finds synthesized symbols** *(deferred to Section F — requires LSP `workspace/symbol` request).*
+- [ ] **`textDocument/references` on a target column** *(deferred to Section F — requires LSP reference request).*
 
 ## Notes / gotchas
 

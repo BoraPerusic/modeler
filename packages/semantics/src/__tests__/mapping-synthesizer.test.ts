@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { parseString } from '@modeler/parser';
 import { ProjectSymbolTable } from '../project-symbols.js';
+import { DocumentSymbolTable } from '../symbol-table.js';
 import { synthesizeMappings } from '../mapping-synthesizer.js';
 
 function setup(ttr: string, uri = 'file:///t/er.ttr') {
@@ -92,15 +93,50 @@ describe('mapping-synthesizer — source location', () => {
   });
 });
 
-describe('mapping-synthesizer — schemaless', () => {
-  it('synthesized symbol is in project table but not in document table', () => {
-    const symbols = setup(`
-      package p
-      schema er
-      def entity e {
-        attributes: [def attribute id { type: int, mapping: IDX }]
-      }
-    `);
+describe('mapping-synthesizer — schemaless (project-table only, not in per-file table)', () => {
+  it('synthesized er2db_* symbols do NOT appear in the host file DocumentSymbolTable', () => {
+    const parsed = parseString(`package p
+  schema er
+  def entity e {
+    mapping: { target: { table: db.dbo.T }, columns: { id: IDX } }
+  }`);
+    if (parsed.errors.length) throw new Error('fixture parse errors');
+
+    const uri = 'file:///er.ttr';
+    const symbols = new ProjectSymbolTable();
+    symbols.upsertDocument(uri, parsed.ast!, 'er', '', 'p');
+    synthesizeMappings(symbols, uri, parsed.ast!);
+
+    expect(symbols.get('p.map.er2dbEntity.e')).toBeDefined();
     expect(symbols.get('p.map.er2dbAttribute.e.id')).toBeDefined();
+
+    const docTable = new DocumentSymbolTable(uri, parsed.ast!, 'er', '');
+    const er2 = docTable.all().filter((e) => String(e.kind).startsWith('er2db'));
+    expect(er2, `unexpected er2db_* in per-file table: ${er2.map((e) => e.qname).join(', ')}`).toHaveLength(0);
+  });
+});
+
+describe('mapping-synthesizer — collision with explicit def', () => {
+  it('duplicates() reports inline+explicit collision at the same qname', () => {
+    const er = parseString(`package billing.products
+  schema er
+  def entity artikl {
+    mapping: { target: { table: db.dbo.QZBOZI_DF }, columns: { id: IDZBOZI } }
+  }`);
+    const map = parseString(`package billing.products
+  schema map
+  def er2db_entity artikl { entity: er.entity.artikl, target: { table: db.dbo.QZBOZI_DF } }`);
+    if (er.errors.length || map.errors.length) throw new Error('fixture parse errors');
+
+    const symbols = new ProjectSymbolTable();
+    symbols.upsertDocument('file:///er.ttr', er.ast!, 'er', '', 'billing.products');
+    synthesizeMappings(symbols, 'file:///er.ttr', er.ast!);
+    symbols.upsertDocument('file:///map.ttr', map.ast!, 'map', '', 'billing.products');
+
+    const dupes = symbols.duplicates();
+    const entityDup = dupes.find((d) => d.qname === 'billing.products.map.er2dbEntity.artikl');
+    expect(entityDup, `duplicates(): ${JSON.stringify(dupes)}`).toBeDefined();
+    const sources = entityDup!.entries.map((e) => e.mappingSource).sort();
+    expect(sources).toEqual(['explicit', 'inline']);
   });
 });

@@ -1,11 +1,7 @@
 import type {
   Document,
   EntityDef,
-  AttributeDef,
   RelationDef,
-  MappingProperty,
-  MappingColumnEntry,
-  SourceLocation,
 } from '@modeler/parser';
 import { ProjectSymbolTable } from './project-symbols.js';
 import type { SymbolEntry } from './symbol-table.js';
@@ -21,8 +17,12 @@ export function synthesizeMappings(
   for (const def of ast.definitions) {
     if (def.kind === 'entity') {
       collectFromEntity(def, packageName, uri, entries);
-    } else if (def.kind === 'attribute') {
-    } else if (def.kind === 'relation') {
+} else if (def.kind === 'attribute') {
+    // Top-level `def attribute X { mapping: ... }` (outside any entity) is
+    // silently skipped — the synthesized qname would have no entity qualifier
+    // and the use case is `def attribute` *inside* `entity.attributes`. Per
+    // design (Section D.3 spec): silent skip is acceptable for v2.1.
+  } else if (def.kind === 'relation') {
       collectFromRelation(def, packageName, uri, entries);
     }
   }
@@ -103,6 +103,19 @@ function collectFromRelation(
   });
 }
 
+/**
+ * Builds the synthesized er2db_* qname using the host file's package and the
+ * camelCase AST `kind` token (e.g. `er2dbEntity`) — matching what `addEntry`
+ * produces for an explicit `def er2db_entity X` in a `schema map` file WITH NO
+ * NAMESPACE. If a project's `map.ttr` declares a namespace
+ * (`schema map namespace <X>`), `addEntry` produces `<pkg>.map.<X>.<name>` and
+ * synthesized symbols will live at a different qname; `duplicates()` and the
+ * Section E validator will not see those as collisions. The production
+ * convention (see `samples/v1.1-metadata/billing/map.ttr`) is no namespace on
+ * map-schema files, so this is acceptable for v2.1; if it ever changes,
+ * synthQname must consult the explicit map.ttr's namespace (or `makeQname`
+ * must be made kind-stable for er2db_* defs).
+ */
 function synthQname(pkg: string, kindToken: string, name: string): string {
   const segments: string[] = [];
   if (pkg) segments.push(pkg);
