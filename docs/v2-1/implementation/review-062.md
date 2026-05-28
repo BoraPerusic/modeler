@@ -88,3 +88,19 @@ Same pattern as Sections C/D. The diff ends with `\ No newline at end of file`. 
 ## Recommendation
 
 Section E ships. The functional contract is met cleanly, the diagnostic noise floor is zero, and the full workspace gate is green for the first time in this release (parser 122 · semantics 120 · integration 99 · typecheck 8/8 · lint 8/8). Address **E1** (restore the integration sample-cleanliness test) and **E2** (clean up the now-dead `sampleFiles`) before Section F, since F is where you'll want that broad integration guardrail anyway. E3–E7 are sub-30-minute polish; bundle them with another Section F change. `tasks-review-062.md` has the concrete, ordered steps.
+
+---
+
+## Resolution (2026-05-28, commit `36ab4dc`)
+
+**Verdict now: DONE — all cleanup items closed in a single commit.** Re-verified each item against runtime.
+
+- **E1 ✅** — `it('parses all sample files (non-broken) without errors', …)` restored at integration.test.ts (just before the new v2.1 broken-fixture describe), reading the existing `sampleFiles`. Integration suite count went 99 → 104 (+1 sweep + 4 db.ttr clean cases from E5).
+- **E2 ✅** — `let sampleFiles` and its `beforeAll` assignment removed from the `lsp integration` describe. The `parser integration` declaration (line 123) is now the only one, and it's consumed by the restored E1 test.
+- **E3 ✅** — `it.skip('file-ordering.ttr …')` re-indented to 4 spaces, matching surrounding style.
+- **E4 ✅** — `validateDuplicateMappings` now filters out the entry's own location before joining. Verified at runtime: the diagnostic at `er.ttr:6` now lists only `map.ttr:5` (the *other* side), and vice versa. Cross-reference reads cleanly.
+- **E5 ✅** — Each v2.1 fixture describe now also asserts `db.ttr` emits an empty set. Tightens the guardrail against future regressions where a stub-table file might accidentally fire a diagnostic.
+- **E6 ✅** — Added `only inline → 0` and `only explicit → 0` cases for both attribute and relation. Semantics suite went 120 → 124 (+4).
+- **E7 ✅** — Dev confirmed via `xxd` that the file already had a trailing newline; the earlier `\ No newline at end of file` was a git-diff display artifact. No change needed.
+
+**Gate after fix:** parser 122 · semantics 124 · edit 60 · migrate 23 · lsp 130 · vscode-ext 24 · designer 129 · integration **104** (+1 skip) · `pnpm -r typecheck` 8/8 · `pnpm -r lint` 8/8 · `pnpm -r build` clean. **Section E fully complete; Section F (integration tests + sample cleanup) can proceed.**

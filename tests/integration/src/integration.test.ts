@@ -124,7 +124,7 @@ describe('parser integration', () => {
   let brokenFiles: string[];
 
   beforeAll(async () => {
-    sampleFiles = await getAllTtrFiles(samplesDir, ['broken', '2.1']); // 2.1 sketch is WIP until Section F (review-059 B2)
+    sampleFiles = await getAllTtrFiles(samplesDir, ['broken']);
     // v1.1 broken fixtures are excluded from the parse-error sweep above because
     // many are *intentionally* malformed (wrong order, wrong kinds, etc.) and
     // would fail that test. They are covered by the targeted tests below and by

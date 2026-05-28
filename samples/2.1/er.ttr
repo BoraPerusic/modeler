@@ -1,148 +1,120 @@
+package samples.v2_1
+import samples.v2_1.db.*
+
 schema er namespace entity
 
-def entity artikl { description: """Evidence všech artiklů a jejich vlastností.
-""",
+// ---- artikl: entity-level mapping with mixed inline-column forms ----
+def entity artikl { description: """Evidence všech artiklů a jejich vlastností.""",
     displayLabel: { cs: "Artikl", en: "Item" },
     nameAttribute: název_artiklu,
     codeAttribute: kód_artiklu,
     mapping: {
-        target: {
-            table: db.dbo.QZBOZI_DF
-            }
-        attributes: {
-            id_artiklu: target {
-                column: IDZBOZI
-            },
-            kód_artiklu: KOD_ZBOZI
+        target: { table: db.dbo.QZBOZI_DF },
+        columns: {
+            id_artiklu:     IDZBOZI,
+            kód_artiklu:    { target: KOD_ZBOZI },
+            název_artiklu:  { target: { column: NAZEV_ZBOZI } },
+            id_produktu:    IDSKUPZBOZI,
+            id_podproduktu: IDSKUPZBOZI
         }
+    },
     attributes: [
-        def attribute id_artiklu { type: int, isKey: true, description: "Unikátní identifikátor artiklu" },
-        def attribute kód_artiklu { type: text, optional: true, description: "Unikátní kód artiklu" },
-        def attribute název_artiklu {
-            type: text,
-            optional: true,
-            description: "Obchodní název artiklu",
-            mapping: {
-                target: {
-                    column: NAZEV_ZBOZI
-                    }
-            },
-        def attribute id_produktu {
-            type: int,
-            optional: true,
-            description: "Vazba na nadřazený produkt",
-            mapping: {
-                column: IDSKUPZBOZI
-               }
-            },
-        def attribute id_podproduktu {
-            type: int,
-            optional: true,
-            description: "Vazba na nadřazený podprodukt" ,
-            mapping: IDXXPODSKUPZBOZI
-            }
+        def attribute id_artiklu     { type: int, isKey: true, description: "Unikátní identifikátor artiklu" },
+        def attribute kód_artiklu    { type: text, optional: true, description: "Unikátní kód artiklu" },
+        def attribute název_artiklu  { type: text, optional: true, description: "Obchodní název artiklu" },
+        def attribute id_produktu    { type: int, optional: true, description: "Vazba na nadřazený produkt" },
+        def attribute id_podproduktu { type: int, optional: true, description: "Vazba na nadřazený podprodukt" }
     ]
 }
 
-def entity produkt { description: """Evidence produktů a jejich vlastností.
-""",
+// ---- produkt: attribute-level inline mappings (no entity-level mapping block) ----
+def entity produkt { description: """Evidence produktů a jejich vlastností.""",
     displayLabel: { cs: "Produkt", en: "Product" },
     nameAttribute: název_produktu,
     attributes: [
-        def attribute id_produktu { type: int, isKey: true, description: "Unikátní identifikátor produktu" },
-        def attribute kód_produktu { type: text, optional: true, description: "Unikátní kód produktu" },
-        def attribute název_produktu { type: text, optional: true, description: "Obchodní název produktu" }
+        def attribute id_produktu     { type: int, isKey: true, mapping: IDSKUPZBOZI },
+        def attribute kód_produktu    { type: text, optional: true, mapping: KOD_SKUPZBOZI },
+        def attribute název_produktu  { type: text, optional: true, mapping: { target: { column: NAZEV_SKUPZBOZI } } }
     ]
 }
 
-def mapping {
-    type: er2db,
-    source: {
-        entity: produkt
-    },
-    target: {
-        table: db.dbo.QSKUPZBOZI_DF
-    },
-    attributes: {
-    id_produktu: { target: { column: IDSKUPZBOZI }},
-    kód_produktu: { target: KOD_SKUPZBOZI },
-    název_produktu: NAZEV_SKUPZBOZI
-    }
-}
-
-def entity podprodukt { description: """Evidence podproduktů a jejich vlastností.
-""",
+// ---- podprodukt: NO inline mappings — covered by explicit def er2db_* in map.ttr ----
+def entity podprodukt { description: """Evidence podproduktů a jejich vlastností.""",
     nameAttribute: název_podproduktu,
     attributes: [
-        def attribute id_podproduktu { type: int, isKey: true, description: "Unikátní identifikátor podproduktu" },
-        def attribute kód_podproduktu { type: text, optional: true, description: "Unikátní kód podproduktu" },
-        def attribute název_podproduktu { type: text, optional: true, description: "Obchodní název podproduktu" },
-        def attribute id_produktu { type: int, optional: true, description: "Vazba na nadřazený produkt" }
+        def attribute id_podproduktu     { type: int, isKey: true },
+        def attribute kód_podproduktu    { type: text, optional: true },
+        def attribute název_podproduktu  { type: text, optional: true },
+        def attribute id_produktu        { type: int, optional: true }
     ]
 }
 
-def entity obchodní_kanál { description: """Evidence obchodních kanálů a jejich vlastností.
-""",
+// ---- obchodní_kanál: no inline mappings ----
+def entity obchodní_kanál { description: """Evidence obchodních kanálů a jejich vlastností.""",
     codeAttribute: kód_kanálu,
     attributes: [
-        def attribute id_kanálu { type: int, isKey: true, description: "Unikátní identifikátor obchodního kanálu" },
-        def attribute kód_kanálu { type: text, optional: true, description: "Unikátní kód obchodního kanálu" },
-        def attribute název_kanálu { type: text, optional: true, description: "Název obchodního kanálu" },
-        def attribute id_tržní_skupiny { type: int, optional: true, description: "Vazba na tržní skupinu" }
+        def attribute id_kanálu { type: int, isKey: true },
+        def attribute kód_kanálu { type: text, optional: true },
+        def attribute název_kanálu { type: text, optional: true },
+        def attribute id_tržní_skupiny { type: int, optional: true }
     ]
 }
 
-def entity tržní_skupina { description: """Evidence tržních skupin a jejich vlastností.
-""",
+// ---- tržní_skupina: no inline mappings ----
+def entity tržní_skupina { description: """Evidence tržních skupin a jejich vlastností.""",
     nameAttribute: název_skupiny,
     codeAttribute: kód_skupiny,
     attributes: [
-        def attribute id_tržní_skupiny { type: int, isKey: true, description: "Unikátní identifikátor tržní skupiny" },
-        def attribute kód_skupiny { type: text, optional: true, description: "Unikátní kód tržní skupiny" },
-        def attribute název_skupiny { type: text, optional: true, description: "Název tržní skupiny" }
+        def attribute id_tržní_skupiny { type: int, isKey: true },
+        def attribute kód_skupiny { type: text, optional: true },
+        def attribute název_skupiny { type: text, optional: true }
     ]
 }
 
-def entity subjekt { description: """Evidence zákazníků (subjektů) a jejich vlastností.
-""",
+// ---- subjekt: no inline mappings ----
+def entity subjekt { description: """Evidence zákazníků (subjektů) a jejich vlastností.""",
     nameAttribute: název_subjektu,
     attributes: [
-        def attribute id_subjektu { type: int, isKey: true, description: "Unikátní identifikátor subjektu" },
-        def attribute ičo { type: text, optional: true, description: "IČO subjektu" },
-        def attribute název_subjektu { type: text, optional: true, description: "Obchodní název subjektu" },
-        def attribute id_kanálu { type: int, optional: true, description: "Vazba na obchodní kanál" }
+        def attribute id_subjektu { type: int, isKey: true },
+        def attribute ičo { type: text, optional: true },
+        def attribute název_subjektu { type: text, optional: true },
+        def attribute id_kanálu { type: int, optional: true }
     ]
 }
 
-// many → zero-or-one  (one artikl belongs to at most one produkt)
+// ---- relations: artikl_produkt and artikl_podprodukt have inline mapping; others are explicit ----
+
+// artikl -> produkt: bare-id FK form
 def relation artikl_produkt { description: "Artikl patří pod nadřazený produkt",
     from: er.entity.artikl, to: er.entity.produkt,
     cardinality: { from: "0..*", to: "0..1" },
-    join: [{ from: er.entity.artikl.id_produktu, to: er.entity.produkt.id_produktu }]
+    join: [{ from: er.entity.artikl.id_produktu, to: er.entity.produkt.id_produktu }],
+    mapping: db.dbo.fk_artikl_produkt
 }
 
-// many → one  (artikl mandatorily belongs to one podprodukt)
+// artikl -> podprodukt: wrapped FK form
 def relation artikl_podprodukt { description: "Artikl patří pod nadřazený podprodukt",
     from: er.entity.artikl, to: er.entity.podprodukt,
     cardinality: { from: "0..*", to: "1" },
-    join: [{ from: er.entity.artikl.id_podproduktu, to: er.entity.podprodukt.id_podproduktu }]
+    join: [{ from: er.entity.artikl.id_podproduktu, to: er.entity.podprodukt.id_podproduktu }],
+    mapping: { fk: db.dbo.fk_artikl_podprodukt }
 }
 
-// many → one  (each podprodukt rolls up to one produkt)
+// podprodukt -> produkt: no inline mapping (explicit in map.ttr)
 def relation podprodukt_produkt { description: "Podprodukt patří pod nadřazený produkt",
     from: er.entity.podprodukt, to: er.entity.produkt,
     cardinality: { from: "0..*", to: "1" },
     join: [{ from: er.entity.podprodukt.id_produktu, to: er.entity.produkt.id_produktu }]
 }
 
-// one-or-many → one  (every kanál hangs off exactly one tržní skupina, every skupina has ≥1 kanál)
+// obchodní kanál -> tržní skupina: no inline mapping
 def relation obchodní_kanál_tržní_skupina { description: "Obchodní kanál patří k tržní skupině",
     from: er.entity.obchodní_kanál, to: er.entity.tržní_skupina,
     cardinality: { from: "1..*", to: "1" },
     join: [{ from: er.entity.obchodní_kanál.id_tržní_skupiny, to: er.entity.tržní_skupina.id_tržní_skupiny }]
 }
 
-// many → one-or-many  (subjekt is reachable via 1+ kanál; a kanál has 0..n subjekts)
+// subjekt -> obchodní kanál: no inline mapping
 def relation subjekt_obchodní_kanál { description: "Subjekt obsluhuje obchodní kanál",
     from: er.entity.subjekt, to: er.entity.obchodní_kanál,
     cardinality: { from: "*", to: "1..*" },

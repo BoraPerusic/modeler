@@ -91,7 +91,7 @@ describe('parseFile', () => {
   });
 
   it('parses all sample files without errors', async () => {
-    const ttrFiles = await getAllTtrFiles(samplesDir, ['broken', '2.1']); // 2.1 sketch is WIP until Section F (review-059 B2)
+    const ttrFiles = await getAllTtrFiles(samplesDir, ['broken']);
 
     for (const file of ttrFiles) {
       const result = await parseFile(file);

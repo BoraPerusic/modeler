@@ -1,5 +1,7 @@
 # Tasks — review-062 (Section E: duplicate-mapping validator)
 
+> **STATUS (2026-05-28, commit `36ab4dc`): all closed.** E1 (sample-sweep restored), E2 (dead `sampleFiles` removed from lsp describe), E3 (it.skip re-indented), E4 (own location filtered from diagnostic message — verified at runtime that each location names the *other*), E5 (db.ttr clean assertion added to all 4 fixtures), E6 (clean-only-inline / clean-only-explicit added for attribute + relation), E7 (file already had trailing newline; no change needed). Gate: parser 122 · semantics 124 · edit 60 · migrate 23 · lsp 130 · vscode-ext 24 · designer 129 · integration **104**(+1 skip) · typecheck 8/8 · lint 8/8. Section F can proceed. See the "Resolution" section of [`review-062.md`](review-062.md).
+
 Findings in [`review-062.md`](review-062.md). Section E ships clean — the validator, 4 broken fixtures, unit suite, and integration wiring are all correct, and the full workspace gate is green (parser 122 · semantics 120 · integration 99(+1 skip) · typecheck 8/8 · lint 8/8). All findings below are cleanup/polish — none block Section F. Do **E1 and E2 now** (restoring the deleted guardrail test + removing dead code); fold E3–E7 into the Section F commit if convenient.
 
 > Work on branch `feat/v2.1-inline-mappings`. The fixtures all use `schema map` without a namespace — that's the production convention from review-061 D3 that makes the qnames actually collide. Don't change that.
