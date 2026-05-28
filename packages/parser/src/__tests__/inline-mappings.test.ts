@@ -1,5 +1,17 @@
 import { describe, it, expect } from 'vitest';
 import { parseString } from '../index.js';
+import type { Definition, MappingColumnValue } from '../index.js';
+
+// Narrows any kind-discriminated value (Definition, MappingProperty, MappingColumnValue,
+// PropertyValue, …) to the variant matching `kind`. Throws if it doesn't match.
+function assertKind<T extends { kind: string }, K extends T['kind']>(
+  value: T | undefined,
+  kind: K,
+): Extract<T, { kind: K }> {
+  if (!value) throw new Error(`expected kind=${kind}, got undefined`);
+  if (value.kind !== kind) throw new Error(`expected kind=${kind}, got ${value.kind}`);
+  return value as Extract<T, { kind: K }>;
+}
 
 describe('inline mappings — entity level', () => {
   it('parses entity with full inline mapping + columns map', () => {
@@ -22,26 +34,29 @@ describe('inline mappings — entity level', () => {
       }
     `);
     expect(result.errors, `parse errors: ${result.errors.map(e => e.message).join(', ')}`).toEqual([]);
-    const entity = result.ast!.definitions[0] as any;
+    const entity = assertKind<Definition, 'entity'>(result.ast!.definitions[0], 'entity');
     expect(entity.kind).toBe('entity');
     expect(entity.mapping).toBeDefined();
-    expect(entity.mapping.kind).toBe('block');
-    expect(entity.mapping.target).toBeDefined();
-    expect(entity.mapping.columns).toHaveLength(3);
-    expect(entity.mapping.columns[0].name).toBe('id_artiklu');
-    expect(entity.mapping.columns[0].value.kind).toBe('bareId');
+    const mapping = assertKind(entity.mapping, 'block');
+    expect(mapping.kind).toBe('block');
+    expect(mapping.target).toBeDefined();
+    expect(mapping.columns).toHaveLength(3);
+    const columns = mapping.columns!;
+    expect(columns[0].name).toBe('id_artiklu');
+    expect(columns[0].value.kind).toBe('bareId');
 
     // form (b): { target: KOD_ZBOZI } — target wrapper preserved
-    expect(entity.mapping.columns[1].name).toBe('kód_artiklu');
-    expect(entity.mapping.columns[1].value.kind).toBe('object');
-    expect(entity.mapping.columns[1].value.object.entries[0].key).toBe('target');
-    expect(entity.mapping.columns[1].value.object.entries[0].value.path).toBe('KOD_ZBOZI');
+    expect(columns[1].name).toBe('kód_artiklu');
+    const col1 = assertKind<MappingColumnValue, 'object'>(columns[1].value, 'object');
+    expect(col1.object.entries[0].key).toBe('target');
+    const col1Inner = assertKind(col1.object.entries[0].value, 'id');
+    expect(col1Inner.path).toBe('KOD_ZBOZI');
 
     // form (c): { target: { column: NAZEV_ZBOZI } } — target wrapper preserved, inner is an object
-    expect(entity.mapping.columns[2].name).toBe('název_artiklu');
-    expect(entity.mapping.columns[2].value.kind).toBe('object');
-    expect(entity.mapping.columns[2].value.object.entries[0].key).toBe('target');
-    expect(entity.mapping.columns[2].value.object.entries[0].value.kind).toBe('object');
+    expect(columns[2].name).toBe('název_artiklu');
+    const col2 = assertKind<MappingColumnValue, 'object'>(columns[2].value, 'object');
+    expect(col2.object.entries[0].key).toBe('target');
+    expect(col2.object.entries[0].value.kind).toBe('object');
   });
 });
 
@@ -52,10 +67,11 @@ describe('inline mappings — attribute level', () => {
       def attribute id_produktu { type: int, mapping: IDSKUPZBOZI }
     `);
     expect(result.errors, `parse errors: ${result.errors.map(e => e.message).join(', ')}`).toEqual([]);
-    const attr = result.ast!.definitions[0] as any;
+    const attr = assertKind<Definition, 'attribute'>(result.ast!.definitions[0], 'attribute');
     expect(attr.mapping).toBeDefined();
-    expect(attr.mapping.kind).toBe('bareId');
-    expect(attr.mapping.id.path).toBe('IDSKUPZBOZI');
+    const mapping = assertKind(attr.mapping, 'bareId');
+    expect(mapping.kind).toBe('bareId');
+    expect(mapping.id.path).toBe('IDSKUPZBOZI');
   });
 
   it('parses attribute with full mapping block', () => {
@@ -67,9 +83,10 @@ describe('inline mappings — attribute level', () => {
       }
     `);
     expect(result.errors, `parse errors: ${result.errors.map(e => e.message).join(', ')}`).toEqual([]);
-    const attr = result.ast!.definitions[0] as any;
-    expect(attr.mapping.kind).toBe('block');
-    expect(attr.mapping.target).toBeDefined();
+    const attr = assertKind<Definition, 'attribute'>(result.ast!.definitions[0], 'attribute');
+    const mapping = assertKind(attr.mapping, 'block');
+    expect(mapping.kind).toBe('block');
+    expect(mapping.target).toBeDefined();
   });
 });
 
@@ -87,9 +104,10 @@ describe('inline mappings — relation level', () => {
       }
     `);
     expect(result.errors, `parse errors: ${result.errors.map(e => e.message).join(', ')}`).toEqual([]);
-    const rel = result.ast!.definitions[2] as any;
-    expect(rel.mapping.kind).toBe('bareId');
-    expect(rel.mapping.id.path).toBe('db.dbo.fk_a_b');
+    const rel = assertKind<Definition, 'relation'>(result.ast!.definitions[2], 'relation');
+    const mapping = assertKind(rel.mapping, 'bareId');
+    expect(mapping.kind).toBe('bareId');
+    expect(mapping.id.path).toBe('db.dbo.fk_a_b');
   });
 
   it('parses relation with fk block', () => {
@@ -105,9 +123,10 @@ describe('inline mappings — relation level', () => {
       }
     `);
     expect(result.errors, `parse errors: ${result.errors.map(e => e.message).join(', ')}`).toEqual([]);
-    const rel = result.ast!.definitions[2] as any;
-    expect(rel.mapping.kind).toBe('block');
-    expect(rel.mapping.fk).toBeDefined();
+    const rel = assertKind<Definition, 'relation'>(result.ast!.definitions[2], 'relation');
+    const mapping = assertKind(rel.mapping, 'block');
+    expect(mapping.kind).toBe('block');
+    expect(mapping.fk).toBeDefined();
   });
 });
 
@@ -126,11 +145,12 @@ describe('source locations', () => {
     const result = parseString(`schema er
   def attribute id { type: int, mapping: IDX }`);
     expect(result.errors).toEqual([]);
-    const attr = result.ast!.definitions[0] as any;
+    const attr = assertKind<Definition, 'attribute'>(result.ast!.definitions[0], 'attribute');
+    expect(attr.mapping).toBeDefined();
     // Source location should cover the value span
-    expect(attr.mapping.source.line).toBe(2);
+    expect(attr.mapping!.source.line).toBe(2);
     const fileText = `schema er\n  def attribute id { type: int, mapping: IDX }`;
-    const offset = attr.mapping.source.offsetStart;
+    const offset = attr.mapping!.source.offsetStart;
     expect(fileText.slice(offset, offset + 3)).toBe('IDX');
   });
 });

@@ -1,5 +1,7 @@
 # Tasks — review-061 (Section D: semantic synthesizer)
 
+> **STATUS (2026-05-28): all closed.** D1–D6 in commit `5f2324b`; D7 (this re-review's follow-up — uncommitted in working tree) replaces the 6 `as any` casts in `inline-mappings.test.ts` with a typed `assertKind` narrowing helper, taking `pnpm -r lint` fully green. Final gate: parser 122 · semantics 114 · edit 60 · migrate 23 · lsp 130 · vscode-ext 24 · designer 129 · integration 92(+1 skip) · typecheck 8/8 · **lint 8/8**. Section E can proceed. See the "Resolution" section of [`review-061.md`](review-061.md).
+
 Findings in [`review-061.md`](review-061.md). The synthesizer, symbol-table additions, and LSP wiring are correct, the unit tests pass, and the real-world collision scenario works (`duplicates()` fires for `schema map` files with no namespace). Three things must be cleaned up before Section E: a red lint (D1), missing tests for the two invariants that exist *because of* Section E (D2), and a qname-convention reconciliation (D3). D4–D6 are cleanup/notes.
 
 > Work on branch `feat/v2.1-inline-mappings`. Run `pnpm -r build` (not just typecheck) before opening PRs so the LSP esbuild bundles pick up `synthesizeMappings` (see D4).
@@ -182,13 +184,64 @@ The Section D Verification list has four bullets that are inherently LSP-level i
 
 ---
 
+## D7 — Replace `as any` in `inline-mappings.test.ts` *(HIGH — surfaced by re-review; carry-over from Section C, blocks `pnpm -r lint`)*
+
+Workspace-wide `pnpm -r lint` (first run as part of D's gate) surfaces 6 `@typescript-eslint/no-explicit-any` errors in `packages/parser/src/__tests__/inline-mappings.test.ts` at lines 25, 55, 70, 90, 108, 129 — all of the form `const X = result.ast!.definitions[N] as any;`. CLAUDE.md is explicit: `ESLint forbids any outside generated/**`. The tests were copied verbatim from the Section C spec template (which used `as any` for brevity); they need typed assertions.
+
+- [ ] **Edit `packages/parser/src/__tests__/inline-mappings.test.ts`.** Add a type-only import at the top of the file (matching the style of other parser tests):
+  ```ts
+  import type { EntityDef, AttributeDef, RelationDef } from '../index.js';
+  ```
+
+- [ ] **Replace each `as any` cast with the precise AST type, gated by a `kind` narrowing assertion.** For each cast at lines 25/55/70/90/108/129, change `const X = result.ast!.definitions[N] as any;` to (pattern per kind):
+
+  Entity case (line 25):
+  ```ts
+  const def0 = result.ast!.definitions[0];
+  if (def0.kind !== 'entity') throw new Error(`expected entity, got ${def0.kind}`);
+  const entity: EntityDef = def0;
+  ```
+
+  Attribute cases (lines 55, 70, 129) — same pattern, but check `'attribute'` and type `AttributeDef`:
+  ```ts
+  const def0 = result.ast!.definitions[0];
+  if (def0.kind !== 'attribute') throw new Error(`expected attribute, got ${def0.kind}`);
+  const attr: AttributeDef = def0;
+  ```
+
+  Relation cases (lines 90, 108) — `definitions[2]` with `'relation'` and `RelationDef`:
+  ```ts
+  const def2 = result.ast!.definitions[2];
+  if (def2.kind !== 'relation') throw new Error(`expected relation, got ${def2.kind}`);
+  const rel: RelationDef = def2;
+  ```
+
+  (You can keep the existing variable name — `entity` / `attr` / `rel` — by renaming the temporary if you prefer; the point is the narrowing pattern.)
+
+- [ ] **Verify:**
+  ```bash
+  pnpm --filter @modeler/parser lint
+  pnpm --filter @modeler/parser test -- inline-mappings
+  pnpm --filter @modeler/parser typecheck
+  ```
+  All three green; inline-mappings test count unchanged.
+
+- [ ] **Run the full lint gate:**
+  ```bash
+  pnpm -r lint
+  ```
+  Expect: all packages green. (If a different package complains, it's a separate carry-over — flag it but don't fix here.)
+
+---
+
 ## Done when
 
-- [ ] D1: `pnpm --filter @modeler/semantics lint` clean.
-- [ ] D2: `pnpm --filter @modeler/semantics test -- mapping-synthesizer` green with **6** tests; the new collision test asserts `duplicates()` finds the qname with both `mappingSource` values; the schemaless test asserts absence from the host `DocumentSymbolTable`.
-- [ ] D3: design doc §4.2 and grammar-changes §4.2 use `er2dbEntity` / `er2dbAttribute` (not underscored); `synthQname` carries the namespace-assumption note; design doc has a "known limitation" bullet.
-- [ ] D4: Section H's verification list runs `pnpm -r build`.
-- [ ] D5: trailing newlines added; explanatory comment restored on the empty branch; commit-hash typo fixed.
-- [ ] D6: D's Verification list trims LSP-level bullets (or marks them deferred to F).
-- [ ] Re-run the Section D gate: `pnpm -r build` · `pnpm -r test` green · `pnpm -r typecheck` green · `pnpm -r lint` green.
-- [ ] Commit on `feat/v2.1-inline-mappings`, e.g. `Section D (review-061): lint fix + collision/schemaless tests + qname doc reconciliation`.
+- [x] D1: `pnpm --filter @modeler/semantics lint` clean.
+- [x] D2: `pnpm --filter @modeler/semantics test -- mapping-synthesizer` green with **6** tests; the new collision test asserts `duplicates()` finds the qname with both `mappingSource` values; the schemaless test asserts absence from the host `DocumentSymbolTable`.
+- [x] D3: design doc §4.2 and grammar-changes §4.2 use `er2dbEntity` / `er2dbAttribute` (not underscored); `synthQname` carries the namespace-assumption note; design doc has a "Namespace assumption" paragraph.
+- [x] D4: Section H's verification list runs `pnpm -r build`.
+- [x] D5: trailing newlines added on `mapping-synthesizer.ts` and `index.ts`; explanatory comment restored; commit-hash typo fixed.
+- [x] D6: D's Verification list trims LSP-level bullets (deferred to F).
+- [x] **D7: `as any` casts in `inline-mappings.test.ts` replaced with a typed `assertKind` narrowing helper; `pnpm -r lint` green.**
+- [x] Re-run the Section D gate after D7: `pnpm -r test` green · `pnpm -r typecheck` green · `pnpm -r lint` green.
+- [ ] Commit on `feat/v2.1-inline-mappings`, e.g. `Section D (review-061 follow-up): typed AST asserts in inline-mappings test`.

@@ -99,3 +99,22 @@ This is the implicit qname-convention assumption the synthesizer makes — and i
 ## Recommendation
 
 D is one trivial fix (D1) and two test additions (D2) away from a clean, fully-guarded synthesizer; D3 is a doc/code-comment reconciliation. **Do D1 first** — it's an immediate red gate. Then D2 to guard the two invariants the spec already cares about. D3 needs ~10 lines of doc updates and an in-code comment. D4/D5 are cleanup. Once D1–D3 land, Section E can build its validator on a green, well-tested foundation. `tasks-review-061.md` has the concrete, ordered steps.
+
+---
+
+## Resolution (2026-05-28, commit `5f2324b`)
+
+**Verdict now: D itself is DONE; one carry-over from Section C surfaces (D7).** Re-verified against runtime — all six D-items resolved, full workspace green except for a pre-existing Section C lint debt that this review's `pnpm -r lint` run surfaced.
+
+- **D1 ✅** `mapping-synthesizer.ts` trimmed to import only `Document`, `EntityDef`, `RelationDef`; `pnpm --filter @modeler/semantics lint` clean. Bonus: the dev proactively also trimmed 4 corresponding unused imports in `packages/parser/src/walker.ts` from Section C — good adjacent cleanup, not asked for.
+- **D2 ✅** Two tests added to `mapping-synthesizer.test.ts`: a collision test asserting `duplicates()` returns the colliding qname with both `mappingSource` values (`['explicit', 'inline']`), and a rewritten schemaless test that asserts **absence** from the host `DocumentSymbolTable` (constructed directly, exactly the pattern the spec asked for). Semantics suite is now 114 (was 113; the schemaless test was rewritten in place, the collision test is net-new).
+- **D3 ✅** Both design docs (`v2.1-inline-mappings.md` §4.1/§4.2, `grammar-v2-1-changes.md` §4.2) updated from `er2db_entity`/`er2db_attribute`/`er2db_relation` (underscored) to `er2dbEntity`/`er2dbAttribute`/`er2dbRelation` (camelCase — matching what the code produces). The `Namespace assumption` paragraph in `v2.1-inline-mappings.md` §4.2 documents the `schema map`-no-namespace requirement and points at the namespaced limitation. `synthQname` carries the same note in code. The dev also tightened `source: 'inline'` → `mappingSource: 'inline'` to match the actual field name — a small useful correction.
+- **D4 ✅** `pnpm -r build` is already at line 67 of `docs/v2-1/plan/tasks/section-H-wrap-up.md` (predates this review; satisfied).
+- **D5 ✅ mostly** EOF newlines added on `mapping-synthesizer.ts` and `index.ts`; explanatory comment restored on the empty `attribute` branch; commit-hash typo fixed (`05b0748` → `6c0903a`). Two minor leftovers: the restored comment introduced inconsistent indentation around the `} else if` lines (cosmetic; lint doesn't enforce), and the test file `inline-mappings.test.ts` was edited but still has no trailing newline. Not worth a re-spin.
+- **D6 ✅** Section D Verification list bullets 3–6 marked deferred to Section F; bullets 1–2 marked done.
+
+### Newly surfaced — D7 (Section C carry-over, not D's fault)
+
+`pnpm -r lint` is still red because of **6 `@typescript-eslint/no-explicit-any` errors** in `packages/parser/src/__tests__/inline-mappings.test.ts` (lines 25, 55, 70, 90, 108, 129). They were introduced in Section C (commit `df56393`) — the test file uses `result.ast!.definitions[0] as any` to access `.mapping` on a `Definition` union. Neither review-060 nor review-061 ran `pnpm -r lint` workspace-wide, so the debt sat hidden. CLAUDE.md is explicit: `ESLint forbids any outside generated/**`. The dev's review-061 commit removed 4 lint errors in walker.ts as a bonus (taking parser from 10 errors → 6), but didn't get to zero. Fix is mechanical: replace each `as any` with `as EntityDef` / `as AttributeDef` / `as RelationDef` and an enforcing `kind` narrowing assertion. Tracked as D7 in `tasks-review-061.md`.
+
+**Gate after fix (modulo D7):** parser 122 · semantics 114 · edit 60 · migrate 23 · lsp 130 · vscode-ext 24 · designer 129 · integration 92 (+1 skip) · `pnpm -r typecheck` 8/8 · `pnpm -r build` green · LSP esbuild bundles contain `synthesizeMappings` (3 hits in each of `server.js`, `server-stdio.js`, `server-browser.js`). Section D's deliverable is complete; once D7 lands, the workspace lint gate is also green and Section E can proceed.
