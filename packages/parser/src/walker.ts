@@ -45,6 +45,8 @@ import {
   QueryDefContext,
   RoleDefContext,
   Er2cncRoleDefContext,
+  DrillMapDefContext,
+  DrillArgsMapContext,
   ColumnDefListContext,
   IndexDefListContext,
   ConstraintDefListContext,
@@ -102,6 +104,8 @@ import type {
   QueryDef,
   RoleDef,
   Er2cncRoleDef,
+  DrillMapDef,
+  DrillArgEntry,
   MappingProperty,
   MappingColumnEntry,
   MappingColumnValue,
@@ -447,6 +451,7 @@ function walkDefinition(ctx: DefinitionContext, file: string): Definition {
   if (objDef.QUERY()) return walkQueryDef(objDef.queryDef()!, name, source, file);
   if (objDef.ROLE()) return walkRoleDef(objDef.roleDef()!, name, source, file);
   if (objDef.ER2CNC_ROLE()) return walkEr2cncRoleDef(objDef.er2cncRoleDef()!, name, source, file);
+  if (objDef.DRILL_MAP()) return walkDrillMapDef(objDef.drillMapDef()!, name, source, file);
 
   return { kind: 'model', name, source } satisfies ModelDef;
 }
@@ -1197,6 +1202,78 @@ function walkEr2cncRoleDef(
   }
 
   return { kind: 'er2cncRole', name, source, description, tags, entity, role };
+}
+
+function walkDrillMapDef(
+  ctx: DrillMapDefContext,
+  name: string,
+  source: SourceLocation,
+  file: string
+): DrillMapDef {
+  let description: StringValue | TripleStringValue | undefined;
+  let tags: string[] | undefined;
+  let from: Reference | undefined;
+  let to: Reference | undefined;
+  let args: DrillArgEntry[] = [];
+  let display: LocalizedString | undefined;
+  let overrideAuto: boolean | undefined;
+
+  for (const p of ctx.drillMapProperty()) {
+    if (p.descriptionProperty()) {
+      description = walkStringLiteralForm(p.descriptionProperty()!.stringLiteralForm()!, file);
+    }
+    if (p.tagsProperty()) {
+      tags = walkListOfStrings(p.tagsProperty()!.listOfStrings()!, file);
+    }
+    if (p.fromProperty()?.value()?.id()) {
+      const idCtx = p.fromProperty()!.value()!.id()!;
+      const parts = idCtx.idPart().map((pt) => pt.getText());
+      from = { path: parts.join('.'), parts, source: makeSourceLocation(idCtx, file) };
+    }
+    if (p.toProperty()?.value()?.id()) {
+      const idCtx = p.toProperty()!.value()!.id()!;
+      const parts = idCtx.idPart().map((pt) => pt.getText());
+      to = { path: parts.join('.'), parts, source: makeSourceLocation(idCtx, file) };
+    }
+    if (p.argsProperty()) {
+      args = walkDrillArgsMap(p.argsProperty()!.drillArgsMap()!, file);
+    }
+    if (p.displayProperty()) {
+      display = walkLocalizedString(p.displayProperty()!.localizedString()!, file);
+    }
+    if (p.overrideProperty()?.BOOLEAN_LITERAL()) {
+      overrideAuto = p.overrideProperty()!.BOOLEAN_LITERAL()!.getText() === 'true';
+    }
+  }
+
+  return {
+    kind: 'drillMap',
+    name,
+    source,
+    description,
+    tags,
+    from,
+    to,
+    args,
+    display,
+    overrideAuto,
+  };
+}
+
+function walkDrillArgsMap(ctx: DrillArgsMapContext, file: string): DrillArgEntry[] {
+  const result: DrillArgEntry[] = [];
+  for (const entry of ctx.drillArgEntry()) {
+    const idCtx = entry.id();
+    if (!idCtx) continue;
+    const argName = idCtx.idPart().map((pt) => pt.getText()).join('.');
+    const value = walkStringLiteralForm(entry.stringLiteralForm()!, file);
+    result.push({
+      name: argName,
+      value,
+      source: makeSourceLocation(entry, file),
+    });
+  }
+  return result;
 }
 
 // ============================================================================

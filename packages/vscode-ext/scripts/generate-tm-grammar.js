@@ -69,6 +69,10 @@ function tokenToScope(name, literal) {
         case 'ER2DB_RELATION': return 'keyword.other.kind.ttr';
         case 'ROLE': return 'keyword.other.kind.ttr';
         case 'ER2CNC_ROLE': return 'keyword.other.kind.ttr';
+        case 'DRILL_MAP': return 'keyword.other.kind.ttr';
+        case 'ARGS': return 'keyword.other.property.ttr';
+        case 'DISPLAY': return 'keyword.other.property.ttr';
+        case 'OVERRIDE': return 'keyword.other.property.ttr';
         case 'DESCRIPTION': return 'keyword.other.property.ttr';
         case 'TAGS': return 'keyword.other.property.ttr';
         case 'VERSION': return 'keyword.other.property.ttr';

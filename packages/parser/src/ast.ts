@@ -396,6 +396,38 @@ export interface Er2cncRoleDef {
   role?: Reference;
 }
 
+/**
+ * v2.2 — `def drill_map <id> { from, to, args, display?, override? }`.
+ *
+ * `from` / `to` reference existing `def query` patterns (cross-package allowed).
+ * `args` maps target-parameter names (declared on the `to` pattern) to column
+ * names in `from`'s result projection or string literals — values are kept as
+ * `StringValue`s here; ai-platform decides whether each is a column or literal.
+ * `display` is a localised chip label; the loader supplies a default when absent.
+ * `overrideAuto` suppresses auto-derived drills with the same target.
+ *
+ * One-to-one for v1: one declaration per (from, to) pair. Multiple drill
+ * targets on one source pattern → multiple `def drill_map` blocks.
+ */
+export interface DrillMapDef {
+  kind: 'drillMap';
+  name: string;
+  source: SourceLocation;
+  description?: StringValue | TripleStringValue;
+  tags?: string[];
+  from?: Reference;
+  to?: Reference;
+  args: DrillArgEntry[];
+  display?: LocalizedString;
+  overrideAuto?: boolean;
+}
+
+export interface DrillArgEntry {
+  name: string;
+  value: StringValue | TripleStringValue;
+  source: SourceLocation;
+}
+
 export type Definition =
   | ModelDef
   | TableDef
@@ -413,7 +445,8 @@ export type Definition =
   | Er2dbRelationDef
   | QueryDef
   | RoleDef
-  | Er2cncRoleDef;
+  | Er2cncRoleDef
+  | DrillMapDef;
 
 // ============================================================================
 // Document / parse result
