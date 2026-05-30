@@ -4,6 +4,7 @@ import { DocumentSymbolTable, type SymbolEntry } from './symbol-table.js';
 export class ProjectSymbolTable {
   private byDocument: Map<string, DocumentSymbolTable> = new Map();
   private byQname: Map<string, SymbolEntry[]> = new Map();
+  private synthesizedByDocument: Map<string, SymbolEntry[]> = new Map();
 
   upsertDocument(uri: string, ast: Document, schemaCode: string, namespace: string, _packageName = ''): void {
     const existing = this.byDocument.get(uri);
@@ -38,10 +39,54 @@ export class ProjectSymbolTable {
     }
 
     this.byDocument.delete(uri);
+
+    const synth = this.synthesizedByDocument.get(uri) ?? [];
+    for (const e of synth) {
+      const list = this.byQname.get(e.qname);
+      if (list) {
+        const filtered = list.filter((x) => x.documentUri !== uri);
+        if (filtered.length === 0) this.byQname.delete(e.qname);
+        else this.byQname.set(e.qname, filtered);
+      }
+    }
+    this.synthesizedByDocument.delete(uri);
+  }
+
+  /**
+   * Add synthesized er2db_* symbol entries (from v2.1 inline mappings) attributed
+   * to the host document. These appear in `byQname` queries but NOT in
+   * `byDocument(uri).all()` — by design, inline-synthesized symbols live in the
+   * project index only.
+   */
+  upsertSynthesizedSymbols(uri: string, entries: SymbolEntry[]): void {
+    const prev = this.synthesizedByDocument.get(uri) ?? [];
+    for (const e of prev) {
+      const list = this.byQname.get(e.qname);
+      if (list) {
+        const filtered = list.filter((x) => !(x.documentUri === uri && x.mappingSource === 'inline' && x.qname === e.qname));
+        if (filtered.length === 0) this.byQname.delete(e.qname);
+        else this.byQname.set(e.qname, filtered);
+      }
+    }
+
+    for (const e of entries) {
+      const list = this.byQname.get(e.qname) ?? [];
+      list.push(e);
+      this.byQname.set(e.qname, list);
+    }
+    this.synthesizedByDocument.set(uri, entries);
   }
 
   get(qname: string): SymbolEntry | undefined {
     return this.byQname.get(qname)?.[0];
+  }
+
+  allQnames(): string[] {
+    return [...this.byQname.keys()];
+  }
+
+  getAll(qname: string): SymbolEntry[] {
+    return this.byQname.get(qname) ?? [];
   }
 
   all(): SymbolEntry[] {

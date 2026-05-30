@@ -39,9 +39,14 @@ import {
   Er2dbEntityDefContext,
   Er2dbAttributeDefContext,
   Er2dbRelationDefContext,
+  MappingPropertyContext,
+  MappingColumnMapContext,
+  TargetPropertyContext,
   QueryDefContext,
   RoleDefContext,
   Er2cncRoleDefContext,
+  DrillMapDefContext,
+  DrillArgsMapContext,
   ColumnDefListContext,
   IndexDefListContext,
   ConstraintDefListContext,
@@ -99,6 +104,11 @@ import type {
   QueryDef,
   RoleDef,
   Er2cncRoleDef,
+  DrillMapDef,
+  DrillArgEntry,
+  MappingProperty,
+  MappingColumnEntry,
+  MappingColumnValue,
   PackageDecl,
   ImportDecl,
   GraphBlock,
@@ -441,6 +451,7 @@ function walkDefinition(ctx: DefinitionContext, file: string): Definition {
   if (objDef.QUERY()) return walkQueryDef(objDef.queryDef()!, name, source, file);
   if (objDef.ROLE()) return walkRoleDef(objDef.roleDef()!, name, source, file);
   if (objDef.ER2CNC_ROLE()) return walkEr2cncRoleDef(objDef.er2cncRoleDef()!, name, source, file);
+  if (objDef.DRILL_MAP()) return walkDrillMapDef(objDef.drillMapDef()!, name, source, file);
 
   return { kind: 'model', name, source } satisfies ModelDef;
 }
@@ -844,6 +855,7 @@ function walkEntityDef(
   let roles: string[] | undefined;
   let displayLabel: LocalizedString | undefined;
   let search: SearchBlock | undefined;
+  let mapping: MappingProperty | undefined;
 
   for (const p of ctx.entityProperty()) {
     if (p.descriptionProperty()) {
@@ -880,9 +892,12 @@ function walkEntityDef(
     if (p.searchBlockProperty()) {
       search = walkSearchBlock(p.searchBlockProperty()!.searchBlock()!, file);
     }
+    if (p.mappingProperty()) {
+      mapping = walkMappingProperty(p.mappingProperty()!, file);
+    }
   }
 
-  return { kind: 'entity', name, source, description, tags, labelPlural, nameAttribute, codeAttribute, aliases, attributes, roles, displayLabel, search };
+  return { kind: 'entity', name, source, description, tags, labelPlural, nameAttribute, codeAttribute, aliases, attributes, roles, displayLabel, search, mapping };
 }
 
 function walkAttributeDef(
@@ -899,6 +914,7 @@ function walkAttributeDef(
   let valueLabels: ValueLabels | undefined;
   let displayLabel: LocalizedString | undefined;
   let search: SearchBlock | undefined;
+  let mapping: MappingProperty | undefined;
 
   for (const p of ctx.attributeProperty()) {
     if (p.descriptionProperty()) {
@@ -925,9 +941,12 @@ function walkAttributeDef(
     if (p.searchBlockProperty()) {
       search = walkSearchBlock(p.searchBlockProperty()!.searchBlock()!, file);
     }
+    if (p.mappingProperty()) {
+      mapping = walkMappingProperty(p.mappingProperty()!, file);
+    }
   }
 
-  return { kind: 'attribute', name, source, description, tags, type, isKey, optional, valueLabels, displayLabel, search };
+  return { kind: 'attribute', name, source, description, tags, type, isKey, optional, valueLabels, displayLabel, search, mapping };
 }
 
 function walkRelationDef(
@@ -943,6 +962,7 @@ function walkRelationDef(
   let cardinality: ObjectValue | undefined;
   let join: ListValue | undefined;
   let search: SearchBlock | undefined;
+  let mapping: MappingProperty | undefined;
 
   for (const p of ctx.relationProperty()) {
     if (p.descriptionProperty()) {
@@ -966,9 +986,12 @@ function walkRelationDef(
     if (p.searchBlockProperty()) {
       search = walkSearchBlock(p.searchBlockProperty()!.searchBlock()!, file);
     }
+    if (p.mappingProperty()) {
+      mapping = walkMappingProperty(p.mappingProperty()!, file);
+    }
   }
 
-  return { kind: 'relation', name, source, description, tags, from, to, cardinality, join, search };
+  return { kind: 'relation', name, source, description, tags, from, to, cardinality, join, search, mapping };
 }
 
 // ============================================================================
@@ -984,7 +1007,7 @@ function walkEr2dbEntityDef(
   let description: StringValue | TripleStringValue | undefined;
   let tags: string[] | undefined;
   let entity: Reference | undefined;
-  let target: ObjectValue | undefined;
+  let target: ObjectValue | Reference | undefined;
   let whereFilter: ObjectValue | undefined;
 
   for (const p of ctx.er2dbEntityProperty()) {
@@ -999,8 +1022,8 @@ function walkEr2dbEntityDef(
       const parts = idCtx.idPart().map((pt) => pt.getText());
       entity = { path: parts.join('.'), parts, source: makeSourceLocation(idCtx, file) };
     }
-    if (p.targetProperty()?.object_()) {
-      target = walkObject(p.targetProperty()!.object_()!, file);
+    if (p.targetProperty()) {
+      target = walkTargetValue(p.targetProperty()!, file);
     }
     if (p.whereFilterProperty()?.object_()) {
       whereFilter = walkObject(p.whereFilterProperty()!.object_()!, file);
@@ -1019,7 +1042,7 @@ function walkEr2dbAttributeDef(
   let description: StringValue | TripleStringValue | undefined;
   let tags: string[] | undefined;
   let attribute: Reference | undefined;
-  let target: ObjectValue | undefined;
+  let target: ObjectValue | Reference | undefined;
 
   for (const p of ctx.er2dbAttributeProperty()) {
     if (p.descriptionProperty()) {
@@ -1033,8 +1056,8 @@ function walkEr2dbAttributeDef(
       const parts = idCtx.idPart().map((pt) => pt.getText());
       attribute = { path: parts.join('.'), parts, source: makeSourceLocation(idCtx, file) };
     }
-    if (p.targetProperty()?.object_()) {
-      target = walkObject(p.targetProperty()!.object_()!, file);
+    if (p.targetProperty()) {
+      target = walkTargetValue(p.targetProperty()!, file);
     }
   }
 
@@ -1181,6 +1204,78 @@ function walkEr2cncRoleDef(
   return { kind: 'er2cncRole', name, source, description, tags, entity, role };
 }
 
+function walkDrillMapDef(
+  ctx: DrillMapDefContext,
+  name: string,
+  source: SourceLocation,
+  file: string
+): DrillMapDef {
+  let description: StringValue | TripleStringValue | undefined;
+  let tags: string[] | undefined;
+  let from: Reference | undefined;
+  let to: Reference | undefined;
+  let args: DrillArgEntry[] = [];
+  let display: LocalizedString | undefined;
+  let overrideAuto: boolean | undefined;
+
+  for (const p of ctx.drillMapProperty()) {
+    if (p.descriptionProperty()) {
+      description = walkStringLiteralForm(p.descriptionProperty()!.stringLiteralForm()!, file);
+    }
+    if (p.tagsProperty()) {
+      tags = walkListOfStrings(p.tagsProperty()!.listOfStrings()!, file);
+    }
+    if (p.fromProperty()?.value()?.id()) {
+      const idCtx = p.fromProperty()!.value()!.id()!;
+      const parts = idCtx.idPart().map((pt) => pt.getText());
+      from = { path: parts.join('.'), parts, source: makeSourceLocation(idCtx, file) };
+    }
+    if (p.toProperty()?.value()?.id()) {
+      const idCtx = p.toProperty()!.value()!.id()!;
+      const parts = idCtx.idPart().map((pt) => pt.getText());
+      to = { path: parts.join('.'), parts, source: makeSourceLocation(idCtx, file) };
+    }
+    if (p.argsProperty()) {
+      args = walkDrillArgsMap(p.argsProperty()!.drillArgsMap()!, file);
+    }
+    if (p.displayProperty()) {
+      display = walkLocalizedString(p.displayProperty()!.localizedString()!, file);
+    }
+    if (p.overrideProperty()?.BOOLEAN_LITERAL()) {
+      overrideAuto = p.overrideProperty()!.BOOLEAN_LITERAL()!.getText() === 'true';
+    }
+  }
+
+  return {
+    kind: 'drillMap',
+    name,
+    source,
+    description,
+    tags,
+    from,
+    to,
+    args,
+    display,
+    overrideAuto,
+  };
+}
+
+function walkDrillArgsMap(ctx: DrillArgsMapContext, file: string): DrillArgEntry[] {
+  const result: DrillArgEntry[] = [];
+  for (const entry of ctx.drillArgEntry()) {
+    const idCtx = entry.id();
+    if (!idCtx) continue;
+    const argName = idCtx.idPart().map((pt) => pt.getText()).join('.');
+    const value = walkStringLiteralForm(entry.stringLiteralForm()!, file);
+    result.push({
+      name: argName,
+      value,
+      source: makeSourceLocation(entry, file),
+    });
+  }
+  return result;
+}
+
 // ============================================================================
 // Inline def lists
 // ============================================================================
@@ -1303,6 +1398,7 @@ function walkAttributeDefList(ctx: AttributeDefListContext, file: string): Attri
     let valueLabels: ValueLabels | undefined;
     let displayLabel: LocalizedString | undefined;
     let search: SearchBlock | undefined;
+    let mapping: MappingProperty | undefined;
 
     for (const p of inlineCtx.attributeProperty()) {
       if (p.descriptionProperty()) {
@@ -1329,9 +1425,12 @@ function walkAttributeDefList(ctx: AttributeDefListContext, file: string): Attri
       if (p.searchBlockProperty()) {
         search = walkSearchBlock(p.searchBlockProperty()!.searchBlock()!, file);
       }
+      if (p.mappingProperty()) {
+        mapping = walkMappingProperty(p.mappingProperty()!, file);
+      }
     }
 
-    result.push({ kind: 'attribute', name, source: makeSourceLocation(inline, file), description, tags, type, isKey, optional, valueLabels, displayLabel, search });
+    result.push({ kind: 'attribute', name, source: makeSourceLocation(inline, file), description, tags, type, isKey, optional, valueLabels, displayLabel, search, mapping });
   }
   return result;
 }
@@ -1483,6 +1582,109 @@ function walkValueLabels(ctx: ValueLabelsBodyContext, file: string): ValueLabels
     entries.push({ key, label, source: makeSourceLocation(entry, file) });
   }
   return { kind: 'valueLabels', entries, source: makeSourceLocation(ctx, file) };
+}
+
+// ============================================================================
+// v2.1: inline mapping helpers
+// ============================================================================
+
+function walkMappingProperty(ctx: MappingPropertyContext, file: string): MappingProperty {
+  const valueCtx = ctx.mappingValue();
+
+  if (valueCtx.id()) {
+    const idCtx = valueCtx.id()!;
+    const parts = idCtx.idPart().map((pt) => pt.getText());
+    const ref: Reference = {
+      path: parts.join('.'),
+      parts,
+      source: makeSourceLocation(idCtx, file),
+    };
+    return {
+      kind: 'bareId',
+      id: ref,
+      source: makeSourceLocation(valueCtx, file),
+    };
+  }
+
+  const blockCtx = valueCtx.mappingBlock()!;
+  let target: ObjectValue | Reference | undefined;
+  let columns: MappingColumnEntry[] | undefined;
+  let fk: Reference | undefined;
+
+  for (const p of blockCtx.mappingBlockProperty()) {
+    if (p.targetProperty()) {
+      target = walkTargetValue(p.targetProperty()!, file);
+    }
+    if (p.mappingColumnsProperty()) {
+      columns = walkMappingColumnMap(p.mappingColumnsProperty()!.mappingColumnMap()!, file);
+    }
+    if (p.fkProperty_()?.id()) {
+      const idCtx = p.fkProperty_()!.id()!;
+      const parts = idCtx.idPart().map((pt) => pt.getText());
+      fk = { path: parts.join('.'), parts, source: makeSourceLocation(idCtx, file) };
+    }
+  }
+
+  return {
+    kind: 'block',
+    target,
+    columns,
+    fk,
+    source: makeSourceLocation(blockCtx, file),
+  };
+}
+
+function walkTargetValue(ctx: TargetPropertyContext, file: string): ObjectValue | Reference {
+  if (ctx.id()) {
+    const idCtx = ctx.id()!;
+    const parts = idCtx.idPart().map((pt) => pt.getText());
+    return { path: parts.join('.'), parts, source: makeSourceLocation(idCtx, file) };
+  }
+  return walkObject(ctx.object_()!, file);
+}
+
+function walkMappingColumnMap(ctx: MappingColumnMapContext, file: string): MappingColumnEntry[] {
+  const entries: MappingColumnEntry[] = [];
+  for (const e of ctx.mappingColumnEntry()) {
+    const name = e.id().idPart().map((pt) => pt.getText()).join('.');
+    const v = e.mappingColumnValue();
+    let value: MappingColumnValue;
+    if (v.id()) {
+      const idCtx = v.id()!;
+      const parts = idCtx.idPart().map((pt) => pt.getText());
+      value = {
+        kind: 'bareId',
+        id: { path: parts.join('.'), parts, source: makeSourceLocation(idCtx, file) },
+        source: makeSourceLocation(v, file),
+      };
+    } else if (v.mappingTargetValue()) {
+      const mtv = v.mappingTargetValue()!;
+      if (mtv.id()) {
+        const idCtx = mtv.id()!;
+        const parts = idCtx.idPart().map((pt) => pt.getText());
+        value = {
+          kind: 'object',
+          object: { kind: 'object', entries: [{ key: 'target', value: { kind: 'id', path: parts.join('.'), parts, source: makeSourceLocation(idCtx, file) }, source: makeSourceLocation(mtv, file) }], source: makeSourceLocation(mtv, file) },
+          source: makeSourceLocation(v, file),
+        };
+      } else {
+        const inner = walkObject(mtv.object_()!, file);
+        value = {
+          kind: 'object',
+          object: { kind: 'object', entries: [{ key: 'target', value: inner, source: makeSourceLocation(mtv, file) }], source: makeSourceLocation(v, file) },
+          source: makeSourceLocation(v, file),
+        };
+      }
+    } else {
+      value = {
+        kind: 'object',
+        object: walkObject(v.object_()!, file),
+        source: makeSourceLocation(v, file),
+      };
+    }
+    entries.push({ name, value, source: makeSourceLocation(e, file) });
+  }
+  return entries;
 }
 
 // ============================================================================

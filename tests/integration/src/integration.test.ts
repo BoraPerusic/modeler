@@ -4,7 +4,7 @@ import * as lsp from 'vscode-languageserver/node';
 import { PassThrough } from 'stream';
 import { createServerConnection } from '@modeler/lsp/server';
 import { DiagnosticCode } from '@modeler/parser';
-import { ProjectSymbolTable, Resolver, Validator, resolveManifest, PackageGraphBuilder } from '@modeler/semantics';
+import { ProjectSymbolTable, Resolver, Validator, resolveManifest, PackageGraphBuilder, synthesizeMappings } from '@modeler/semantics';
 import path from 'path';
 
 const samplesDir = path.resolve(__dirname, '../../../samples');
@@ -68,6 +68,7 @@ async function collectFixtureCodes(rootDir: string, excludeDirs: string[] = []):
       result.ast.schemaDirective?.namespace ?? '',
       result.ast.packageDecl?.name ?? '',
     );
+    synthesizeMappings(symbols, uri, result.ast);
   }
 
   const validator = new Validator(symbols, new Resolver(symbols), resolveManifest(undefined, root));
@@ -128,7 +129,7 @@ describe('parser integration', () => {
     // many are *intentionally* malformed (wrong order, wrong kinds, etc.) and
     // would fail that test. They are covered by the targeted tests below and by
     // the semantics unit-test suite (diagnostics-v1.1.test.ts).
-    brokenFiles = await getAllTtrFiles(brokenDir, ['v1.1']);
+    brokenFiles = await getAllTtrFiles(brokenDir, ['v1.1', 'v2.1']);
   });
 
   // B7 guardrail: every v1.1 broken fixture must emit EXACTLY its advertised
@@ -199,6 +200,38 @@ describe('parser integration', () => {
     }
   });
 
+  describe('v2.1 inline-mapping broken fixture diagnostics', () => {
+    const fixtureDirs = [
+      'duplicate-mapping-entity',
+      'duplicate-mapping-attribute',
+      'duplicate-mapping-relation',
+      'duplicate-mapping-mixed',
+    ];
+
+    for (const fixtureDir of fixtureDirs) {
+      describe(fixtureDir, () => {
+        let codes: Map<string, Set<string>>;
+
+        beforeAll(async () => {
+          codes = await collectFixtureCodes(path.join(brokenDir, 'v2.1', fixtureDir), []);
+        });
+
+        const cases: Array<[string, string[]]> = [
+          ['er.ttr', ['ttr/duplicate-mapping']],
+          ['map.ttr', ['ttr/duplicate-mapping']],
+          ['db.ttr', []],
+        ];
+
+        for (const [file, expected] of cases) {
+          it(`${file} emits exactly ${expected.join(', ')}`, () => {
+            const got = codes.get(file) ?? new Set<string>();
+            expect(got, `${file} got: [${[...got].join(', ')}]`).toEqual(new Set(expected));
+          });
+        }
+      });
+    }
+  });
+
   it('parses samples/v1-metadata/er.ttr with >0 entity definitions', async () => {
     const result = await parseFile(path.join(samplesDir, 'v1-metadata/er.ttr'));
     expect(result.errors).toHaveLength(0);
@@ -217,12 +250,10 @@ describe('parser integration', () => {
 });
 
 describe('lsp integration', () => {
-  let sampleFiles: string[];
   let clientConnection: lsp.Connection;
   let serverConnection: lsp.Connection;
 
   beforeAll(async () => {
-    sampleFiles = await getAllTtrFiles(samplesDir, ['broken']);
     const { client, server } = createPairedConnection();
     clientConnection = client;
     serverConnection = server;

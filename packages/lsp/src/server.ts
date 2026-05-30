@@ -38,6 +38,7 @@ import {
   PackageGraphBuilder,
   enclosingQnameOf,
   inferPackageFromUri,
+  synthesizeMappings,
   type ResolvedManifest,
   type ValidationDiagnostic,
   type PackageGraph,
@@ -287,6 +288,7 @@ export function createServerConnection(
     const namespace = result.ast.schemaDirective?.namespace ?? '';
     const packageName = result.ast.packageDecl?.name ?? '';
     projectSymbols.upsertDocument(uri, result.ast, schemaCode, namespace, packageName);
+    synthesizeMappings(projectSymbols, uri, result.ast);
     refIndex.upsertDocument(uri, result.ast, schemaCode, namespace, resolver, packageName);
   }
 
@@ -328,6 +330,7 @@ export function createServerConnection(
         const docs = await opts.loadStock();
         for (const d of docs) {
           projectSymbols.upsertDocument(d.uri, d.ast, d.schemaCode, d.namespace, '');
+          synthesizeMappings(projectSymbols, d.uri, d.ast);
         }
       } catch {
         // stock loading is best-effort

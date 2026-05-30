@@ -81,6 +81,10 @@ export function tokenToScope(name: string, literal: string): string | null {
     case 'ER2DB_RELATION': return 'keyword.other.kind.ttr';
     case 'ROLE': return 'keyword.other.kind.ttr';
     case 'ER2CNC_ROLE': return 'keyword.other.kind.ttr';
+    case 'DRILL_MAP': return 'keyword.other.kind.ttr';
+    case 'ARGS': return 'keyword.other.property.ttr';
+    case 'DISPLAY': return 'keyword.other.property.ttr';
+    case 'OVERRIDE': return 'keyword.other.property.ttr';
     case 'DESCRIPTION': return 'keyword.other.property.ttr';
     case 'TAGS': return 'keyword.other.property.ttr';
     case 'VERSION': return 'keyword.other.property.ttr';
@@ -121,6 +125,7 @@ export function tokenToScope(name: string, literal: string): string | null {
     case 'DESCRIPTIONS': return 'keyword.other.property.ttr';
     case 'EXAMPLES': return 'keyword.other.property.ttr';
     case 'FUZZY': return 'keyword.other.property.ttr';
+    case 'MAPPING': return 'keyword.other.property.ttr';
     case 'FROM': return 'keyword.other.property.ttr';
     case 'TO': return 'keyword.other.property.ttr';
     case 'TEXT': return 'support.type.primitive.ttr';

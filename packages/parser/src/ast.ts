@@ -153,6 +153,34 @@ export interface ValueLabels {
   source: SourceLocation;
 }
 
+// ----- v2.1: inline mappings -----
+
+export interface MappingPropertyBareId {
+  kind: 'bareId';
+  id: Reference;
+  source: SourceLocation;
+}
+
+export interface MappingPropertyBlock {
+  kind: 'block';
+  target?: ObjectValue | Reference;
+  columns?: MappingColumnEntry[];
+  fk?: Reference;
+  source: SourceLocation;
+}
+
+export type MappingProperty = MappingPropertyBareId | MappingPropertyBlock;
+
+export interface MappingColumnEntry {
+  name: string;
+  value: MappingColumnValue;
+  source: SourceLocation;
+}
+
+export type MappingColumnValue =
+  | { kind: 'bareId'; id: Reference; source: SourceLocation }
+  | { kind: 'object'; object: ObjectValue; source: SourceLocation };
+
 export interface ParameterDef {
   name: string;
   type?: DataType;
@@ -273,6 +301,7 @@ export interface EntityDef {
   roles?: string[];
   displayLabel?: LocalizedString;
   search?: SearchBlock;
+  mapping?: MappingProperty;
 }
 
 export interface AttributeDef {
@@ -287,6 +316,7 @@ export interface AttributeDef {
   valueLabels?: ValueLabels;
   displayLabel?: LocalizedString;
   search?: SearchBlock;
+  mapping?: MappingProperty;
 }
 
 export interface RelationDef {
@@ -300,6 +330,7 @@ export interface RelationDef {
   cardinality?: ObjectValue;
   join?: ListValue;
   search?: SearchBlock;
+  mapping?: MappingProperty;
 }
 
 export interface Er2dbEntityDef {
@@ -309,7 +340,7 @@ export interface Er2dbEntityDef {
   description?: StringValue | TripleStringValue;
   tags?: string[];
   entity?: Reference;
-  target?: ObjectValue;
+  target?: ObjectValue | Reference;
   whereFilter?: ObjectValue;
 }
 
@@ -320,7 +351,7 @@ export interface Er2dbAttributeDef {
   description?: StringValue | TripleStringValue;
   tags?: string[];
   attribute?: Reference;
-  target?: ObjectValue;
+  target?: ObjectValue | Reference;
 }
 
 export interface Er2dbRelationDef {
@@ -365,6 +396,38 @@ export interface Er2cncRoleDef {
   role?: Reference;
 }
 
+/**
+ * v2.2 — `def drill_map <id> { from, to, args, display?, override? }`.
+ *
+ * `from` / `to` reference existing `def query` patterns (cross-package allowed).
+ * `args` maps target-parameter names (declared on the `to` pattern) to column
+ * names in `from`'s result projection or string literals — values are kept as
+ * `StringValue`s here; ai-platform decides whether each is a column or literal.
+ * `display` is a localised chip label; the loader supplies a default when absent.
+ * `overrideAuto` suppresses auto-derived drills with the same target.
+ *
+ * One-to-one for v1: one declaration per (from, to) pair. Multiple drill
+ * targets on one source pattern → multiple `def drill_map` blocks.
+ */
+export interface DrillMapDef {
+  kind: 'drillMap';
+  name: string;
+  source: SourceLocation;
+  description?: StringValue | TripleStringValue;
+  tags?: string[];
+  from?: Reference;
+  to?: Reference;
+  args: DrillArgEntry[];
+  display?: LocalizedString;
+  overrideAuto?: boolean;
+}
+
+export interface DrillArgEntry {
+  name: string;
+  value: StringValue | TripleStringValue;
+  source: SourceLocation;
+}
+
 export type Definition =
   | ModelDef
   | TableDef
@@ -382,7 +445,8 @@ export type Definition =
   | Er2dbRelationDef
   | QueryDef
   | RoleDef
-  | Er2cncRoleDef;
+  | Er2cncRoleDef
+  | DrillMapDef;
 
 // ============================================================================
 // Document / parse result

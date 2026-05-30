@@ -1,7 +1,7 @@
 // =============================================================================
 // TTR (Tatrman) grammar
 //
-// @grammar-version: 2.0
+// @grammar-version: 2.2
 //
 // Version scheme: X.Y — X is a breaking/major change, Y is additive
 // (syntactic sugar, new optional constructs, bug fixes). Bump the marker
@@ -18,6 +18,16 @@
 //   4. Updated document rule to accept the new constructs.
 //   5. Extended idPart to include the new keywords so they remain usable as
 //      cross-reference components.
+//
+// Changes in 2.2 (additive):
+//   - New top-level construct: `def drill_map <id> { from, to, args, display?, override? }`.
+//     Models "click this row → run that pattern". Consumers (ai-platform's new-Golem)
+//     surface drill maps to the FE; modeler treats them like any other def for
+//     parse/diagnose purposes.
+//   - New lexer tokens: DRILL_MAP, ARGS, DISPLAY, OVERRIDE.
+//   - New parser rules: drillMapDef, drillMapProperty, argsProperty, displayProperty,
+//     overrideProperty, drillArgEntry.
+//   - Extended idPart to include the new keywords.
 // =============================================================================
 
 grammar TTR;
@@ -86,6 +96,7 @@ objectDefinition
   | QUERY          id  queryDef
   | ROLE           id  roleDef            // Phase 2.2 — cnc.role.*
   | ER2CNC_ROLE    id  er2cncRoleDef      // Phase 2.2 — er2cnc_role.*
+  | DRILL_MAP      id  drillMapDef        // v2.2 — drill mapping between two patterns
   ;
 
 // ----- Object bodies -----
@@ -108,6 +119,7 @@ er2dbRelationDef : LBRACE (er2dbRelationProperty (COMMA? er2dbRelationProperty)*
 queryDef         : LBRACE (queryProperty         (COMMA? queryProperty)*         COMMA?)? RBRACE ;
 roleDef          : LBRACE (roleProperty          (COMMA? roleProperty)*          COMMA?)? RBRACE ;
 er2cncRoleDef    : LBRACE (er2cncRoleProperty    (COMMA? er2cncRoleProperty)*    COMMA?)? RBRACE ;
+drillMapDef      : LBRACE (drillMapProperty      (COMMA? drillMapProperty)*      COMMA?)? RBRACE ;
 
 // ----- Per-kind valid properties -----
 
@@ -127,11 +139,11 @@ fkProperty               : descriptionProperty | tagsProperty | fromProperty | t
 
 procedureProperty        : descriptionProperty | tagsProperty | parametersProperty | resultColumnsProperty ;
 
-entityProperty           : descriptionProperty | tagsProperty | labelPluralProperty | nameAttributeProperty | codeAttributeProperty | aliasesProperty | attributesProperty | rolesProperty | displayLabelProperty | searchBlockProperty ;
+entityProperty           : descriptionProperty | tagsProperty | labelPluralProperty | nameAttributeProperty | codeAttributeProperty | aliasesProperty | attributesProperty | rolesProperty | displayLabelProperty | searchBlockProperty | mappingProperty ;
 
-attributeProperty        : descriptionProperty | tagsProperty | typeProperty | isKeyProperty | optionalProperty | valueLabelsProperty | displayLabelProperty | searchBlockProperty ;
+attributeProperty        : descriptionProperty | tagsProperty | typeProperty | isKeyProperty | optionalProperty | valueLabelsProperty | displayLabelProperty | searchBlockProperty | mappingProperty ;
 
-relationProperty         : descriptionProperty | tagsProperty | fromProperty | toProperty | cardinalityProperty | joinProperty | searchBlockProperty ;
+relationProperty         : descriptionProperty | tagsProperty | fromProperty | toProperty | cardinalityProperty | joinProperty | searchBlockProperty | mappingProperty ;
 
 er2dbEntityProperty      : descriptionProperty | tagsProperty | entityProperty_ | targetProperty | whereFilterProperty ;
 
@@ -144,6 +156,8 @@ queryProperty            : descriptionProperty | tagsProperty | languageProperty
 roleProperty             : descriptionProperty | tagsProperty | labelProperty | searchBlockProperty ;
 
 er2cncRoleProperty       : descriptionProperty | tagsProperty | entityProperty_ | roleProperty_ ;
+
+drillMapProperty         : descriptionProperty | tagsProperty | fromProperty | toProperty | argsProperty | displayProperty | overrideProperty ;
 
 // A query / procedure parameter: { name: <id>, type: <dataType>, label: "...", direction: <id> }.
 // `label` here is a plain display string (unlike `roleProperty`'s localised `labelProperty`).
@@ -184,7 +198,7 @@ entityProperty_           : ENTITY            propSep? id ;
 attributeProperty_        : ATTRIBUTE         propSep? id ;
 relationProperty_         : RELATION          propSep? id ;
 fkProperty_               : FK                propSep? id ;
-targetProperty            : TARGET            propSep? object_ ;
+targetProperty            : TARGET            propSep? ( object_ | id ) ;
 whereFilterProperty       : WHERE_FILTER      propSep? object_ ;
 languageProperty          : LANGUAGE          propSep? languageValue ;
 sourceTextProperty        : SOURCE_TEXT       propSep? stringLiteralForm ;
@@ -206,6 +220,61 @@ patternsProperty          : PATTERNS          propSep? listOfStrings ;
 descriptionsProperty      : DESCRIPTIONS      propSep? localizedStringList ;
 examplesProperty          : EXAMPLES          propSep? listOfStrings ;
 fuzzyProperty             : FUZZY             propSep? BOOLEAN_LITERAL ;
+
+// v2.2 — drill map properties.
+//
+// `args` is a map of <target-parameter-name> → <source-column-name-or-literal>;
+// keys are bare identifiers (parameter names on the `to` pattern) and values are
+// string literals (column names from `from`'s result projection, or literals).
+// `display` is a localised string for the user-facing drill chip label.
+// `override` (default false) suppresses auto-derived drills with the same target.
+argsProperty          : ARGS              propSep? drillArgsMap ;
+displayProperty       : DISPLAY           propSep? localizedString ;
+overrideProperty      : OVERRIDE          propSep? BOOLEAN_LITERAL ;
+
+drillArgsMap          : LBRACE ( drillArgEntry ( COMMA? drillArgEntry )* COMMA? )? RBRACE ;
+drillArgEntry         : id propSep? stringLiteralForm ;
+
+// v2.1 — inline mapping (syntactic sugar for def er2db_*).
+mappingProperty       : MAPPING propSep? mappingValue ;
+
+mappingValue
+    : id
+    | mappingBlock
+    ;
+
+mappingBlock
+    : LBRACE ( mappingBlockProperty ( COMMA? mappingBlockProperty )* COMMA? )? RBRACE
+    ;
+
+mappingBlockProperty
+    : targetProperty
+    | mappingColumnsProperty
+    | fkProperty_
+    ;
+
+mappingColumnsProperty
+    : COLUMNS propSep? mappingColumnMap
+    ;
+
+mappingColumnMap
+    : LBRACE ( mappingColumnEntry ( COMMA? mappingColumnEntry )* COMMA? )? RBRACE
+    ;
+
+mappingColumnEntry
+    : id propSep? mappingColumnValue
+    ;
+
+mappingColumnValue
+    : id
+    | LBRACE TARGET propSep? mappingTargetValue RBRACE
+    | object_
+    ;
+
+mappingTargetValue
+    : id
+    | object_
+    ;
 
 // ----- Inline def lists -----
 
@@ -374,6 +443,8 @@ idPart
   | FROM | TO                                            // allowed as object property keys (e.g. cardinality, join pairs)
   | PACKAGE | IMPORT | GRAPH                              // v1.1 new top-level keywords
   | OBJECTS | LAYOUT                                      // v1.1 graph body keywords
+  | MAPPING                                         // v2.1
+  | DRILL_MAP | ARGS | DISPLAY | OVERRIDE          // v2.2
   ;
 
 // =============================================================================
@@ -389,6 +460,7 @@ IMPORT     : 'import' ;     // v1.1
 GRAPH      : 'graph' ;      // v1.1
 OBJECTS    : 'objects' ;    // v1.1 graph body
 LAYOUT     : 'layout' ;     // v1.1 graph body
+MAPPING    : 'mapping' ;    // v2.1
 
 DB    : 'db' ;
 ER    : 'er' ;
@@ -412,6 +484,10 @@ ER2DB_RELATION   : 'er2db_relation' ;
 QUERY            : 'query' ;
 ROLE             : 'role' ;            // Phase 2.2
 ER2CNC_ROLE      : 'er2cnc_role' ;     // Phase 2.2
+DRILL_MAP        : 'drill_map' ;       // v2.2
+ARGS             : 'args' ;            // v2.2 — drill map: target param → source col/literal
+DISPLAY          : 'display' ;         // v2.2 — drill map: localised chip label
+OVERRIDE         : 'override' ;        // v2.2 — drill map: suppress auto-derived drill with same target
 
 DESCRIPTION       : 'description' ;
 TAGS              : 'tags' ;

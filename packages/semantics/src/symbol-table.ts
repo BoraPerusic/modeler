@@ -9,6 +9,13 @@ export interface SymbolEntry {
   parent?: string;
   packageName: string;
   schemaCode: string;
+  /**
+   * For er2db_* symbols only: distinguishes explicit `def er2db_*` declarations
+   * from symbols synthesized from inline `mapping:` properties on def entity /
+   * attribute / relation (v2.1). Used by the duplicate-mapping validator.
+   * Undefined for all non-er2db_* kinds.
+   */
+  mappingSource?: 'explicit' | 'inline';
 }
 
 export class DocumentSymbolTable {
@@ -75,6 +82,10 @@ export class DocumentSymbolTable {
       packageName: this.packageName,
       schemaCode: this.schemaCode,
     };
+
+    if (def.kind === 'er2dbEntity' || def.kind === 'er2dbAttribute' || def.kind === 'er2dbRelation') {
+      entry.mappingSource = 'explicit';
+    }
 
     this.entries.set(qnameStr, entry);
 
